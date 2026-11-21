@@ -211,7 +211,7 @@ def apply_exploit_signals(result: ScanResult, index: object | None = None) -> No
     """
     from mcp_audit.exploit import signals  # noqa: PLC0415
 
-    if not any(f.cve for f in result.findings):
+    if not any(signals.own_cves(f) for f in result.findings):
         result.exploit_data = None
         return
     idx = index if index is not None else signals.load()

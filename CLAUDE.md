@@ -92,276 +92,246 @@ Funding is also requested via GitHub Sponsors (handle configured in
 
 ## Project layout
 
+One line per module. The detail for each one (finding IDs, pipeline step,
+budgets, the tests that pin it) is in `docs/module-map.md`: read its entry,
+and the module docstring, before you change a module.
+
 ```
 src/mcp_audit/
-├── cli/               # Typer app package — one submodule per command group
-│   ├── __init__.py      # Defines `app` + sub-apps (baseline/rule/policy/extensions/
-│   │                    #   agent-files); re-exports `run_scan`, `discover_configs`,
-│   │                    #   `parse_config`, and `_REGISTRY_CACHE_PATH` so test
-│   │                    #   patches at `mcp_audit.cli.*` continue to intercept.
-│   │                    #   Imports the command submodules at the bottom so their
-│   │                    #   `@app.command()` decorators register.
-│   ├── __main__.py      # `python -m mcp_audit.cli` entry (plus PyInstaller target)
-│   ├── _helpers.py      # Cross-cutting helpers (`_write_output`)
-│   ├── scan.py          # scan, discover, pin, watch (+ `_drift_to_findings`,
-│   │                    #   `_scoped_state_path`).  The
-│   │                    #   `scan` command is composed from `_apply_*` pipeline
-│   │                    #   stages (baseline drift, governance, SAST, extensions,
-│   │                    #   agent-files, severity filter) and `_write_*` output
-│   │                    #   helpers — see "scan() pipeline conventions" below.
-│   ├── check.py         # check command: one-page practitioner verdict (+ _write_pdf_report)
-│   ├── fix.py           # fix command: apply safe remediations to config files
-│   ├── wrap.py          # wrap / unwrap: rewrite local servers in JSON client configs to launch through `credenzo run` (EPIC-0009 Story 1.2); dry run + gate prediction by default, --apply via fixer.write_config_change
-│   ├── run.py           # `run` as listed in --help; the console script dispatches it to runtime/ before this app loads
-│   ├── guard.py         # `guard` as listed in --help; the console script dispatches it to runtime/guard.py before this app loads (STORY-0176)
-│   ├── diff.py          # diff command: MCP-aware diff for PR review / CI gates
-│   ├── baseline.py      # baseline sub-app: save / list / compare / delete / export
-│   ├── registry.py      # update-registry, verify
-│   ├── rules.py         # rule sub-app: validate / test / list
-│   ├── policy.py        # policy sub-app: validate / init / check (+ `_POLICY_TEMPLATE`)
-│   ├── extensions.py    # extensions sub-app: discover / scan
-│   ├── agent_files.py   # agent-files sub-app: discover / scan (skills, memory, hooks)
-│   ├── plugins.py       # plugins sub-app: discover / scan (Claude Code plugins, STORY-0080)
-│   ├── lock.py          # lock command: write / --verify the committable mcp-lock.json (ADR-0005; --connect tool digests, --save-tool-text)
-│   ├── _bundle.py       # shared --bundle / --bundle-key handling for scan and affected (STORY-0129)
-│   ├── sast.py          # sast command
-│   ├── sbom.py          # sbom command: CycloneDX 1.5 SBOM export
-│   ├── affected.py      # affected command: is this advisory (CVE/GHSA/MAL/research ID or pkg@range) in any discovered server; AFFECTED / NOT AFFECTED / COULDN'T CHECK with evidence (STORY-0121, docs/affected.md)
-│   ├── reach.py         # reach command: what can the agents on this machine touch? one verdict per agent; --format json, --report pdf, --fleet DIR (STORY-0145, docs/reach.md)
-│   ├── vet.py           # vet command: pre-install package verdict (offline, facts not grades)
-│   ├── shadow.py        # shadow command: shadow MCP server sweep (+ --continuous daemon)
-│   ├── killchain.py     # killchain command: top blast-radius-cutting changes
-│   ├── snapshot.py      # snapshot command: signed forensic snapshots (+ --rehydrate/--stream)
-│   ├── dashboard.py     # dashboard command
-│   ├── fleet.py         # merge command (+ `_collect_json_paths_from_dir`,
-│   │                    #   `_print_fleet_report`)
-│   ├── push_nucleus.py  # push-nucleus command: scan + push to Nucleus FlexConnect API
-│   ├── register.py      # register command: interactive opt-in flow, --clear, --status
-│   ├── advise.py        # advise command + feed sub-app (feed verify): OSV advisory feed
-│   └── version.py       # version command
-├── scanner.py         # Orchestrator: discovery → parsing → analysis → output
-├── scoring.py         # Scan score calculation (0–100) and letter grade (A–F) formatting
-├── discovery.py       # Finds MCP config files across all supported clients (Claude Code local scope, STORY-0175: `local_scope_dirs(cwd)` = cwd and parents up to the git root, set as `DiscoveredConfig.local_project_dirs` on `~/.claude.json` in a scan with no explicit path; `config_parser._local_scope_servers` then returns `projects.<dir>.mcpServers` as client `claude-code-local` (`LOCAL_SCOPE_CLIENT`), `ServerConfig.local_project` (never dumped) keys rug-pull records per project; `lock`/`wrap` pass `include_local_scope=False`, `fix` skips them, `reach` counts them through `claude.extra_servers`; `tests/conftest.py` stubs `local_scope_dirs`; Codex: `codex_user_config_path()` honours `CODEX_HOME`; Gemini CLI: `gemini_user_config_path()`; cwd copies as `codex-project`/`gemini-cli-project` via `_harness_cwd_configs`, and the `--project` walk skips the user's own files at `$HOME`, STORY-0110; OpenCode: `opencode_user_config_paths()` = `~/.config/opencode/opencode.json(c)` plus `$OPENCODE_CONFIG` when set (a missing path is dropped silently), cwd `opencode.json(c)` as `opencode-project` (skipped when cwd is `$HOME`), the `--project` walk as plain `opencode`, STORY-0142); `_PROJECT_AUTOEXEC_SPECS` drives the TRUST-003/008 auto-run walk (`--project`) and the TRUST-003/008 cwd-root check of a default scan (skipped when cwd is `$HOME`) (`discover_cwd_autoexec_files`, called from `scanner._cwd_autoexec_findings`); see docs/agent-execution-surface.md
-├── config_parser.py   # Parses JSON configs, normalizes across client formats; Codex `config.toml` (tomllib, `[mcp_servers.*]`) and Gemini CLI `settings.json` (comments stripped as Gemini does, `httpUrl`/`type` transport order) and OpenCode `opencode.json(c)` (JSONC: comments plus trailing commas stripped, top-level `mcp`, `type` `local` = `command` argv + `environment`, `remote` = `url` + `headers`; `enabled: false` still analysed; an entry of unknown type or wrong shape goes to `config.parse_warnings`, STORY-0142) via `config_dialect()` / `DiscoveredConfig.dialect`, 4 MiB cap, TOML values made JSON-safe (STORY-0110; docs/clients.md)
-├── models.py          # Pydantic models: Finding, ServerConfig, ScanResult, ScanScore, Severity, AttackPath, MachineInfo; Finding.line (1-based, set from an agent-file finding's "Line N:" evidence by a model validator; SARIF region.startLine, STORY-0141)
-├── owasp_mcp.py       # Single source of truth for OWASP MCP Top 10 codes/names (MCP01–MCP10)
-├── verdict.py         # Pure verdict builder for `vet` (shared with the mcp-audit.dev generator)
-├── watcher.py         # Filesystem watcher for continuous monitoring (credenzo watch); _McpConfigEventHandler serialises callbacks via _scan_lock with single-event coalesced re-trigger
-├── mcp_client.py      # Live MCP server connection via MCP SDK (--connect); connect_identity(server) = the clientInfo sent in `initialize` (STORY-0177): `--identify-as` (set_connect_identity) wins, a `claude-code*` server gets CLAUDE_CODE_IDENTITY (captured from a live 2.1.328 session), any other client the SDK default `mcp`; bound through `_session_class` (functools.partial), so the transport helpers are unchanged; build_runtime_server_config passes every lock-digested tool field (title, input/output schema, annotations) to the text checks (STORY-0099); a failed stdio handshake keeps the server's stderr (last 64 KiB), unwraps the TaskGroup ExceptionGroup and redacts both (redact_server_text, STORY-0105)
-├── _paths.py          # data_dir() and resolve_bundled_resource() — shared helpers for locating bundled data in source, wheel, and PyInstaller frozen contexts
-├── _network.py        # NetworkPolicy + require_offline_compatible() — centralised --offline mutual-exclusion enforcement for network-touching flags
-├── _entry.py          # Console-script entry: dispatches `run` to runtime/ before the Typer app (and the scanner) is imported (EPIC-0009)
-├── _jcs.py            # RFC 8785 canonical JSON (moved from advisory/canonical.py, which re-exports it) so the `run` launch path can digest tools without the advisory package
-├── runtime/           # `credenzo run` (EPIC-0009, docs/run.md), stdlib-only on the launch path (tests/test_runtime_entry.py, test_runtime_gate.py pin the imports)
-│   ├── cli.py         # argparse for run: --config/--server/--lock/--mode; gate → relay; exit 78 when enforce refuses
-│   ├── relay.py       # byte-exact stdio relay; process group, signal forwarding, exit mirroring; monitor taps lines, enforce relays line by line through the ToolGuard
-│   ├── gate.py        # launch gate: argv vs the lock entry (LOCK-001/002, RUN-001/002); uses lock/core.py only, redaction on the slow path
-│   ├── wrapping.py    # wrapper_trusted(command, root=, recorded=) (STORY-0178): `lock --verify` (verifier._check_drift gets the lock root) reads a wrapped entry as its inner launch only when the wrapper is the running install, or its digest is the lock entry's optional `wrapper` (writer.build_entry, absolute wrapper paths only; never the path), or it is outside the git repository above the lock root with nothing recorded; a bare name is never recorded and is refused when PATH resolves it into the repository; wrap_entry/unwrap_entry (--original-sha256 = RFC 8785 digest of the original entry), inner_launch (config_parser analyses a wrapped entry as its inner server; ServerConfig.wrapped/wrap_mode), WRAPPABLE_CLIENTS, wrap_status; a relative ./mcp-audit is never trusted as the wrapper
-│   ├── guard.py       # `credenzo guard` (STORY-0176, docs/guard.md): Claude Code PreToolUse hook, dispatched by _entry.py like `run`; decide(event) denies an MCP call when the server (by `mcp_server.source`: project = <CLAUDE_PROJECT_DIR>/.mcp.json, user = ~/.claude.json; other sources not covered unless --strict) is not in the lock (LOCK-002), its config entry changed (LOCK-001; plain compare, then lock.verifier._check_drift on the slow path; wrapping.wrapper_trusted for a wrapped entry), has no tool record (RUN-003), the tool is not in it (LOCK-006) or the lock is unusable (RUN-002, gate.read_lock); never prints allow; --allow-server/--allow-source never apply to an unlocked project server; names cleaned by shown(); exit 2 on failure in enforce mode; --print-hook; no new finding IDs; tests/test_runtime_guard.py reads locks written by the real `lock --connect`
-│   └── tools.py       # ToolGuard: live tools/list vs lock tool digests (LOCK-006..009, RUN-003); enforce withholds added/changed tools and denies their tools/call; fails closed (STORY-0181): server_line never raises; in enforce mode the client gets only lines that were read, and only tools whose six compared fields (name, title, description, inputSchema, outputSchema, annotations) equal the lock; a compared field of the wrong type withholds the tool (`_well_typed`, STORY-0183), other keys of an approved tool pass unchanged; `client_line` never raises, stops a `tools/call` to a tool that is not approved as a request, with no id, and in a batch, and does not forward a client line that it cannot read (replies are ASCII: a lone surrogate in an id once made the denial fail and the relay forwarded the call); relay._line_pump, in both directions, drops a line the handler fails on, drops a line over MAX_LINE up to its newline, and handles the last bytes with no newline like a line; `_read` decodes UTF-8 with replacement and refuses what another parser could read differently (not JSON, too deep, a number too long, one key twice) and such a line is not forwarded; every answer with `result.tools` is checked, asked for or not; a tool list in a batch is emptied; a tool that cannot be digested (past _jcs limits) is LOCK-006/LOCK-007 by itself; an answer that cannot be checked reaches the client with no tools (_unchecked_page); non-object entries are not forwarded; withheld wins when two pages list one name; relay._line_pump toward the client drops a line the handler fails on and a line over MAX_LINE
-├── _redact.py         # Local-path redaction for output that leaves the host (advisory feed, SARIF, Nucleus, snapshot)
-├── bundle.py          # Signed air-gapped data bundle (STORY-0129): verify_bundle() checks bundle.json + the feed in a private copy, advances seen.json (0o600) only on success; override() points scan/affected at the bundle's data files
-├── gateways.py        # MCP gateway upstreams (STORY-0111): mcptoon, 1MCP and MCPHub.nvim config files read as data, upstream servers join discovery as `<gateway>-upstream`; project files .mcptoon.json/.toml and .mcphub/servers.json under --project
-├── keys/              # Package carrying the feed public key (mcp-audit-feed.pub), force-included by pyproject.toml
-├── _gitobjects.py     # Read-only git object store (STORY-0153): loose objects, pack v2/v3 with index v2, OFS_DELTA/REF_DELTA, refs (HEAD, loose, packed-refs); SHA-1 only, alternates not followed; never runs git; index kept as raw bytes (512 MiB per store), packs read through a memoryview (never a slice copy of the mmap), packed-refs parsed once; bounded (32 MiB per object, inflate stops at the declared size, delta depth 1,000, 64 REF_DELTA hops, 256 MiB of deltas per chain, ReadBudget charged for index/loose bytes, inflated objects and delta results); symlinked objects/, objects/pack/, objects/xx/ or refs/ not read; malformed → GitObjectError, missing → None
-├── _gitignore.py      # Is a file git-ignored? Read-only (never runs git): gitignore(5) matcher with linear-time wildcards; reads .gitignore files (symlinked ones skipped, as git ≥2.32), .git/info/exclude and the global excludes file (core.excludesFile / XDG, a plain [include] path followed one level); BOM, `***`, empty segments as git; 1 MiB per file, 512-file / 8 MiB budget, anchored patterns longer than the path rejected up front, 5,000,000-step matching budget (MatchMeter); unreadable or over budget → IgnoreStateUnknownError + error text without absolute paths (STORY-0093)
-├── host_platform.py   # detect_host_platform(): windows / wsl / macos / linux from sys.platform plus a size-capped read of /proc/sys/kernel/osrelease or /proc/version for "microsoft"; None when undeterminable; injectable, no subprocess (STORY-0142; used by affected.match.research_rows for records with `platforms`)
-├── harness_versions.py # Installed Claude Code / Codex / Gemini CLI / OpenCode (`opencode-ai`) versions read from files only (STORY-0132, STORY-0142): npm global package.json (prefix env, nvm, Homebrew, /usr/local, APPDATA), Claude Code's ~/.local/share/claude/versions/, and OpenCode's ~/.opencode/bin/opencode[.exe] installer (stat only, `HarnessInstall.version` is None: it keeps no version file, so `affected` says COULDN'T CHECK); 1 MiB cap, hostile files skipped and listed, no subprocess; every install returned (PATH winner unknowable); used by affected.match.research_rows only
-├── guardrails.py      # Guardrail drift (GUARD-001 MEDIUM/HIGH, GUARD-002 INFO, STORY-0143): normalised record per settings file (Claude Code user/project/local, Codex config.toml honouring CODEX_HOME, Gemini CLI settings.json; managed settings files as SHA-256 only) in <state dir>/guardrails.json (or beside an explicit rug-pull state path), reusing agent_files/drift.py's reader, lock, atomic writer and cap; hook commands stored only as SHA-256 + event + matcher; LOOSENING_TABLE is the only definition of a loosening, one cited row per key (vendor docs read 2026-11-04); first sighting silent, a vanished file reported only if it was the sole source of a deny rule or hook; never raises; _run_static_pipeline step 5c2, scans with no explicit path incl. --project (plus cli/scan._apply_project_scan for the tree); docs/guardrail-drift.md
-├── policy_sources.py  # Read-only OS policy readers (STORY-0144): winreg_reader (KEY_READ only, lazy `winreg`, Windows only), read_plist (plistlib, files only, 1 MiB, no symlink out of the root), PlatformSources injected by tests; shared by managed_policy and extensions/policy
-├── affected/          # `affected` engine (STORY-0121): query.py (ID or pkg@PEP 440 range), match.py (per-server decision: RegistryRule/RecordRule/RangeRule, LockIndex, research_rows; reuses supply_chain._fix_status/_pinned_version and malicious._range_covers, no new range resolver), render.py (terminal/JSON/SARIF; JSON/SARIF paths redacted)
-│   ├── transitive.py  # `affected --transitive` (STORY-0131): check_dependencies() extends per-server rows with deps.dev dependency graphs (vulnerability/depsdev.fetch_dependency_graph, reused); a dependency hit is AFFECTED with Row.dependency path, an unreadable/incomplete graph or a server with no exact version is COULDN'T CHECK; GraphSource caches per package and caps lookups at 100; needs --live
-│   ├── fleet.py       # `affected --fleet` (STORY-0131): load_machines() reads `scan --format json` files (bounded, non-blocking, 64 MiB, hostile input becomes COULDN'T CHECK rows); one row per machine x server; no lock lookup (LockIndex(nearest=False))
-│   ├── vex.py         # OpenVEX 0.2.0 writer: affected --format openvex, scan --vex (STORY-0125); one statement per purl, most cautious status wins
-│   ├── fixplan.py     # `affected --fix`: choose(current, fixes) = lowest release fix above current, else skip with reason; pins via fixer.run_pins / strategies.pinning.pin_exact; match.would_close re-runs the advisory's rules on the target (STORY-0127)
-│   └── respond.py     # Respond block (env/header/flag names, shared names, stat-only credential files, saved tool-text count) and --policy-out deniedMcpServers entries checked with managed_policy.entry_matches; never writes the managed dir (STORY-0126)
-├── exploit/           # KEV/EPSS/public-PoC signals (STORY-0124): signals.py (index from data/exploit-signals.json, annotate, sort key, --live fetch); refreshed by scripts/sync_exploit_signals.py; docs/exploit-signals.md
-├── analyzers/
-│   ├── base.py         # BaseAnalyzer abstract class — all analyzers inherit this
-│   ├── poisoning.py    # Tool description poisoning detection (regex-based); PATTERNS list reused by agent_files; POISON-060 counts full-width letters/digits, not punctuation (STORY-0107), and a mixed word (ASCII letters with look-alike letters), not a whole Cyrillic or Greek word (STORY-0170); POISON-012 in PATTERNS is `POISON_012_WITHOUT_SECRECY` (the bare "do not say/tell/mention" branch counts only for MEM-001, via memory_override_match) and POISON-040 is `_POISON_040_CLASS` (joiners that Persian/Indic text and emoji need are silent; `_INVISIBLE_FILLERS` are reported and stripped) (STORY-0171); POISON-080..082 (redirection order, `rm -r` / `echo $SECRET`, /etc/passwd) carry `DetectionPattern.tool_text_only=True`, which agent_files/analyzer.py and scan_concealed_channels skip and PoisoningAnalyzer.analyze reads only under raw["tools"/"resources"/"prompts"] (`_TOOL_TEXT_KEYS`), never in a config entry (STORY-0172; compared with Cisco's YARA rules in docs/research/head-to-head/cisco-yara/); POISON-083 (tool promotes itself: "the premium version", "world's best"; MEDIUM, tool_text_only, STORY-0173); directive family POISON-070..075 (secrecy, autonomy override, ask-user tool ban, coercion, startup exec, remote instructions; DetectionPattern.skill_severity sets their SKILL-001 severity) and memory_override_match() for MEM-001 (STORY-0099); also owns POISON-041..045 concealment-channel extract/decode/rescan (TAG, HTML comment, zero-width binary, variation selectors, and POISON-045 text after ≥20 blank lines, STORY-0141; scan_concealed_channels, build_concealment_finding, concealment_finding_id; ConcealedChannel.start is the channel's offset), shared with agent_files; iter_pattern_matches() = every match passing the co-occurrence gate and DetectionPattern.negated_by (for the agent-file framing gate); POISON-076 oversight bypass (skip/bypass/disable/auto-approve permission, approval or confirmation prompts; --dangerously-skip-permissions/bypassPermissions/--yolo unless scoped to a container; HIGH, negated_by veto incl. a flag's purpose clause; sandbox/hooks/monitoring deliberately not matched), POISON-071 stays LOW in skills (STORY-0141 review); POISON-045 also catches ≥200 spaces inside a line and reports one finding per text (ConcealedChannel.runs); evidence redacted before it is cut (redacted_snippet → supply_chain.redact_command)
-│   ├── credentials.py  # Secret/API key exposure in configs (SECRET_PATTERNS)
-│   ├── transport.py    # Transport security (TLS, localhost binding, etc.)
-│   ├── supply_chain.py # Package provenance and typosquatting detection (registry-backed); SC-007 unscoped twins (takes precedence over SC-001..003) and SC-008 OSV MAL-* exact-name matches (STORY-0097); SC-009 INFO when a pinned version and a CVE's fixed_in are in different numbering schemes (calendar vs semantic) and neither RegistryEntry.semver_resumed_at nor the 0.x rule orders them (_fix_status, STORY-0105); secret_arg_values() (values of --api-key/--token-style flags, for redaction); launch_package()/resolve_launch_entry(), the one "which registry entry does this launch install" resolver shared by TRANSPORT-003 and the rule engine's exempt_known_servers; redact_command() for evidence; redact_args()/redact_url() (STORY-0108; STORY-0118 adds credential headers, `Password=` pairs, `curl -u`, secret query parameters, Base64 userinfo, shared with managed_policy and the lock identity; `redact_env_values` for every client's env in JSON) used by TRANSPORT-001/003/004 evidence, CycloneDX snapshots and ServerConfig's JSON serialisers (command/args/url/raw launch keys; env and headers values are not redacted); REDACTION_MARKER read by diff/comparator as a hardcoded credential in scan files
-│   ├── hook_runnable.py # HOOK-004 (PreToolUse/UserPromptSubmit/Cursor before* hook command Git Bash on Windows can't start: unquoted backslash paths or an unquoted drive-letter path with a space; LOW, MEDIUM in managed settings; skips `shell: powershell`, `args`, Cursor `failClosed`) and HOOK-005 (unreadable/invalid `~/.cursor/hooks.json` or project `.cursor/hooks.json`, MEDIUM) (STORY-0156); Cursor files get HOOK-001/002 via ConfigHygieneAnalyzer._check_hook_commands; managed_hook_findings()/cursor_hook_findings() run in scanner._discover_and_parse (no explicit path), cursor project file also in `scan --project`; 1 MiB reads, symlinks leaving the root not followed; command strings only, never runs a hook
-│   ├── config_hygiene.py # Config-file filesystem hygiene (CFHYG-001..008; CFHYG-007 = project settings `env` redirecting API traffic, STORY-0090; CFHYG-008 = INFO naming the Azure Foundry resource project settings choose, STORY-0108); HARNESS-001 is MEDIUM in project/local settings (Claude Code ≥2.1.257 ignores bypassPermissions there, STORY-0108); hook-command checks HOOK-001/002 and harness posture HARNESS-001..007 (STORY-0079, STORY-0087, STORY-0090) via analyze_config; repo-planted auto-run files TRUST-003 (VS Code) and TRUST-008 (Gemini CLI, Codex, Claude Code scheduled tasks/workflows, STORY-0090) via analyze_autoexec_file
-│   ├── rug_pull.py     # Config-entry change detection via hashing (command, args, env key names, raw entry; not live tool definitions)
-│   ├── toxic_flow.py   # Cross-server capability tagging and dangerous pair detection (TOXIC-001..011, INTEG-001; COMMS_OUT sinks TOXIC-008..011, STORY-0101)
-│   ├── auth.py         # Remote server authentication checks (AUTH-001, AUTH-002)
-│   ├── collision.py    # Tool-name collision detection across --connect servers (COLLIDE-001); detect_tool_name_squats() = COLLIDE-002 (STORY-0173): another server's tool name of ≥2 words plus only `_DECORATION_WORDS` (HIGH when every added word is in `_PROMOTION_WORDS` and stands before or after the whole name, else MEDIUM), or the same words in another spelling on two servers (MEDIUM); one spelling per server, `MAX_NAME_COPY_FINDINGS` = 100, HIGH first; names only, runs right after COLLIDE-001; controls in docs/research/mcp-safetybench/name_copy_controls.py; find_description_copies() / detect_description_copies() = COLLIDE-003 (STORY-0174): two tools on two servers where one description holds the other (always MEDIUM, names both, no direction: nothing that a server chooses (names, arguments) changes the severity; no word list; each tool indexed under each long sentence with per-server caps, either tool can be the holder, `_COPY_WORK_BUDGET`, `MAX_DESCRIPTION_COPY_FINDINGS` = 100; the finding never holds the text); copies_of_approved_tools() gives the direction from the lock, and `cli/lock._withhold_copies` leaves a new tool that carries the description of a tool the lock held before on another server (only approved tools are indexed, with no cap; no launch detail excuses a pair; a new tool that the work budget left untested is not approved) out of `lock --connect`, so `run --mode enforce` withholds it (`--allow-copies` records it); measured in docs/research/copy-checks/
-│   ├── annotations.py  # ANNOT-001 (LOW, non-advisory, STORY-0136): readOnlyHint true on a tool whose input schema runs commands or writes; detect_annotation_contradictions() runs in run_scan_async after DELEG-* (needs --connect), findings_from_tool_text() reads cwd mcp-lock.tools.json in scanner._discover_and_parse (no explicit path); live hit replaces the saved-text hit for the same tool; bounded schema walk, $ref never followed, names cleaned
-│   ├── delegation.py   # Cross-tool delegation in live tool descriptions (DELEG-001..003, STORY-0100): names another
-│   │                   #   server's tool / trigger + action its server lacks / rewrite another tool's arguments;
-│   │                   #   token-based, budgets shared fairly per server, redacted evidence; runs in run_scan_async
-│   │                   #   after COLLIDE-001 (needs --connect: the lock holds digests, not text); SHIPPED_SEVERITY
-│   │                   #   must equal results.json's measured gate decision
-│   ├── git_exec.py     # Git can run code (TRUST-006/007, STORY-0089): tolerant git-config parser, command-key table (_RULES), includes/worktree configs/gitfiles, hooks, nested bare repos; scan_cwd_repository() (default scan/check, via scanner._discover_and_parse) and scan_git_surfaces() (--project, via discovery.discover_project_git_surfaces); check_git_config() is the standalone per-file API (STORY-0096). Never runs git; not a BaseAnalyzer
-│   ├── permissions.py  # Claude Code permission-rule linter (PERM-001..007, STORY-0092): public settings parser (load_claude_settings, reused by sandbox checks); PERM-001..006 via config_hygiene.analyze_config, PERM-007 as _run_static_pipeline step 5b and again across scopes in cli/scan._apply_project_scan; every rule quoted from code.claude.com/docs (docs/permission-rules.md)
-│   ├── sandbox.py      # Claude Code sandbox settings a repository can loosen (SANDBOX-001..005, STORY-0093): reuses permissions.load_claude_settings; all five run as _run_static_pipeline step 0b (analyze_sandbox_files, NOT analyze_config), each file in its own try: a SandboxContext says whose file it is (shared project file = repository; settings.local.json = repository only when no ignore file covers it or .claude is a symlink, MEDIUM cap when its git state is unknown, user's own when ignored or outside a work tree; user settings get only SANDBOX-004) and carries UserSettingsLocks read from ~/.claude/settings.json (strictAllowlist → SANDBOX-003/proxy ports INFO; defaultMode bypassPermissions/auto → SANDBOX-002 HIGH); SANDBOX-005 (local settings headed for git, home paths with a masked username) via _gitignore.py; errors prefixed "SANDBOX checks: "; key scopes from code.claude.com/docs settings-reference (docs/permission-rules.md)
-│   ├── rule_secrets.py # CRED-004 (STORY-0149): credentials inside permissions.allow/ask/deny strings (redact_rule = redact_command_text + PASSWORD/npm-token shapes, reference/wildcard/template values put back); run from sandbox step 0b, HIGH when headed for git; PERM-* and GUARD-001 quote rules through redact_rule
-│   ├── rule_secret_history.py # CRED-005 (STORY-0153): CRED-004's detector over every version of the root .claude/settings.json and settings.local.json in git history (commits reachable from refs and HEAD), reporting rules no longer in today's file (compared by RuleSecretHit.digest, the SHA-256 of the rule as written, so a rotated token counts; commits recorded per rule); a bad object or version is skipped and counted, a budget stop keeps partial findings; reads objects via _gitobjects.py, never runs git; find_repository() mirrors scan_cwd_repository's upward search (linked worktrees via commondir; bare repos skipped); scan_repository_history() runs in scanner._discover_and_parse (no explicit path) and cli/scan._apply_project_scan (the project's repo when it differs from the cwd's); shallow/partial/SHA-256/budget problems go to result.errors; never raises
-│   ├── shipped_settings.py # CRED-006 (STORY-0157): .claude/settings(.local).json a Dockerfile's final image or a non-private npm package ships; own walk (scan --project skip list/depth, no symlinked dirs, MAX_DIRS budget); .dockerignore / <Dockerfile>.dockerignore with BuildKit rules (parity-tested vs moby/patternmatcher) on _gitignore.py's wildcard code; stage model (final stage or Compose target, FROM chain, COPY --from traced by image path via WORKDIR, --exclude); npm: files field, else per-folder .npmignore/.gitignore (never global excludes); HIGH with a CRED-004 hit, LOW local file without, shared file without = silent; scan_cwd_repository() in scanner._discover_and_parse (no --path; skips a work tree that is or contains $HOME), scan_tree() in cli/scan._apply_project_scan (deduped); errors prefixed "CRED-006: "; never runs docker/npm/git; never raises
-│   ├── managed_policy.py # Claude Code managed MCP policy vs configured servers (MANAGED-001..007, STORY-0112, STORY-0144): reads managed-settings.json + managed-settings.d/*.json (drop-in merge rules) and managed-mcp.json from plugins.mods.managed_settings_dir(); STORY-0144 adds read_effective_policy(): macOS plist (`com.anthropic.claudecode`), HKLM/HKCU `Settings` (injectable PlatformSources, FsProbe), ranked plist/HKLM > files > HKCU-when-no-admin, first-wins or `managedSourcesBehavior: merge`, evidence names the source; MANAGED-006 (policy only in HKCU or a user-writable file) and MANAGED-007 (malformed admin source); file-only output byte-identical (tests/test_managed_policy_regression.py); server-managed settings not read, 1 MiB/file, 256 drop-ins, 8 MiB budget; evaluation per code.claude.com/docs/en/managed-mcp (exclusive control → denylist → strictPluginOnlyCustomization → managedMcpServers precedence → allowlist per transport over the merged list when unlocked; exact commands, `*` URL globs without backtracking, documented default-port rules; allowManagedMcpServersOnly/strictPluginOnlyCustomization fail closed; ${VAR} or allowedMcpServers null = undecidable, never "blocked"); settings_allowlists() skips files under a symlinked component; managed_policy_findings() runs at the end of scanner._discover_and_parse (no explicit path) and in cli/scan._apply_project_scan (machine_findings=False, deduplicated by finding_key); never raises; redacted evidence. Not a BaseAnalyzer
-│   ├── secret_reach.py # Credential files a Claude Code session can read without a prompt (REACH-001..003, STORY-0114): stat() only on a fixed list of home stores (SSH default keys, ~/.aws/credentials, gcloud ADC, ~/.git-credentials, ~/.netrc, ~/.pypirc, Claude Code .credentials.json; npmrc/docker/kube/gh as "may hold") and cwd-root .env names — never opened; covered by a Read deny rule (permissions-doc anchoring, gitignore segments matched by non-backtracking DP, `!` carve-outs) from managed/user/project/local settings, blockReadsOutsideWorkingDirectories, or sandbox denyRead/credentials deny; REACH-002 = login store mode bits + searchable parents (POSIX); secret_reach_findings() at the end of scanner._discover_and_parse (no explicit path, only when the Claude config dir exists); never raises; non-advisory; docs/secret-reach.md
-│   ├── npx_cache.py    # SC-011 (CRITICAL, STORY-0158): name + version from each package.json under <npm cache>/_npx/*/node_modules (top level, @scope/name; regular files, O_NOFOLLOW, 64 KiB, 2,000 install dirs / 50,000 packages) matched exact-name against the SC-008 mirror via registry/malicious.assess as a pin; cache = $npm_config_cache, else %LocalAppData%\npm-cache on Windows, else ~/.npm (npm_cache_dir, patched to nothing in tests/conftest.py); npx_cache_findings() runs at the end of scanner._discover_and_parse (no explicit path); never raises
-│   └── attack_paths.py # Multi-hop attack path detection and greedy hitting set algorithm; one path per hop sequence, the most severe pair's (STORY-0101)
-├── reach/             # `reach` engine (STORY-0145): a default ScanResult + settings readers in, MachineReach out; pure, no subprocess (AST-tested); rendering is in output/reach*.py, the command in cli/reach.py
-│   ├── engine.py      # build_machine_reach(result, env=, registry=): agent grouping (agent_of_client: claude-code*/codex*/gemini-cli*/opencode* families, other clients one each), verdict_of (not safe > needs work > couldn't check > ready), CRITICAL-finding attribution; one agent's failure never drops the others
-│   ├── claude.py      # Claude Code's five answers: settings via secret_reach.load_settings_sources, sandbox/approval (managed > local > project > user, bypassPermissions honoured from managed/user only), sandbox network state (Linux needs bwrap+socat or failIfUnavailable; WebFetch/Bash allow rules, excludedCommands and proxy ports; hooks/apiKeyHelper/statusLine network tools), REACH-001..003 credentials (+ secret-shaped settings env, unsandboxed Bash; an unreadable settings file in any scope or a missing config dir = COULDN'T CHECK), extra_servers() (~/.claude.json projects.*.mcpServers, managed-mcp.json exclusive control, managedMcpServers), managed_policy_source() adapter (file-based policy, writer from owner+mode bits via classify_writer; the one place to switch to the #267 source ranking), OpenTelemetry from managed/user `env` only
-│   ├── codex.py       # Codex answers from config.toml (user + cwd project): sandbox_mode, approval_policy, selected profile, sandbox_workspace_write.network_access, [otel] exporter (user file only); credentials and managed config are COULDN'T CHECK
-│   ├── surface.py     # the closed surface (round 5): allowlists for settings keys, env names, launch shape and known-local commands; Cmd records, hook handler types, frontmatter/plugin/ancestor readers; anything not on a list is COULDN'T CHECK (docs/reach.md, "How reach decides")
-│   ├── network.py     # ServerView/NetworkView: toxic_flow.tag_server + registry; NETWORK_OUT/COMMS_OUT/SHELL_EXEC/BROWSER or remote = reaches the network; a stdio server is quiet only when the registry declares its capabilities, otherwise unclassified (COULDN'T CHECK)
-│   ├── common.py      # Assessment and network_status() shared by the per-agent assessors
-│   ├── context.py     # Env (home, cwd, config/managed dirs; mask() shows ~/...), read_capped() (non-blocking, regular files, 1 MiB)
-│   ├── models.py      # dataclasses + MachineReach.to_dict() (docs/reach.schema.json, schema_version 1.0); sanitize() is the one choke point: redact_command_text, home → ~, control characters, 600-char cap
-│   └── fleet.py       # `reach --fleet DIR`: bounded tolerant loader (1000 files, 4 MiB, regular files, non-blocking), counts per agent per verdict, skipped files listed
-├── agent_files/       # Agent instruction/memory file scanner (SKILL-001/002/003, MEM-001..006; also emits POISON-041..045, analyzer="poisoning")
-│   ├── __init__.py    # Package marker; offline-only invariant docs
-│   ├── models.py      # AgentFile dataclass (+ follows_imports, imported_from, edges), AgentFileSurface StrEnum, MEMORY_SURFACES, ImportEdge
-│   ├── discovery.py   # discover_agent_files(); user-global + project-tree walk (mirrors discovery.py conventions); AGENT_INSTRUCTION_PATTERNS incl. AGENTS.md, CLAUDE.local.md, .claude/rules, OpenClaw workspace files (STORY-0098); discover_root_agent_files() / discover_user_heartbeat_files() for the default scan; 4 MiB per-file read cap and a per-call budget
-│   ├── imports.py     # Claude Code @path imports (documented rules: relative to importer, 4 hops, code/comments skipped) and "read X" prose references; follow_references() never reads outside the root or through a symlink (TRUST-002/004), budgeted (STORY-0098)
-│   ├── gitignore.py   # .gitignore matcher read by file (never runs git), non-backtracking wildmatch; MEM-003's "ignored" case
-│   ├── heartbeat.py   # MEM-004 detector: HEARTBEAT_OK/NO_REPLY/notify:false forced, paired with hiding, or after an action
-│   ├── sleeper.py     # MEM-005 detector (STORY-0099): one sentence with an if/when clause (or leading date) holding an unusual trigger (later user cue, root/sudo, hostname, date, off-hours, unobserved), a consequence opening with an action verb, and a payload cue (URL, curl, secrets, backups, remote endpoint, silently) unless unobserved; run by analyze_instruction_reach once per real file
-│   ├── exfil.py       # MEM-006 detector: one sentence with a send verb (not negated), a bulk or local secret (env vars, .env, ~/.ssh, ~/.aws, private keys, all/every ... secrets) within 100 chars and a destination (URL, IP, email, named server/endpoint/webhook) within 160; HIGH in a project file, MEDIUM in the user's own; memory surfaces + Cursor rules + Copilot instructions; run by analyze_instruction_reach with MEM-005; measured in docs/research/mem006/results.json
-│   ├── instruction_shapes.py # MEM-008 detector (STORY-0155): an edit instruction aimed at a machine-wide agent config (~/.codex/config.toml, ~/.claude/settings.json, ~/.cursor/mcp.json, ~/.gemini/settings.json; opening imperative verb, payload within 8 lines, table rows and negations skipped) plus SKILL-006's permissions and base-URL shapes (install_steps.text_shape_hits, reused); HIGH outside a git repository, MEDIUM inside one; MEM-007 (MEDIUM) comes from discovery._discover_dropped: AGENTS.md/CLAUDE.md/GEMINI.md/.cursorrules at the top of ~/Downloads and ~/Desktop (AgentFile.dropped; a symlink is TRUST-002 and not read); docs/research/mem008/results.json
-│   ├── drift.py       # INSTR-001 (INFO, bytes changed) / INSTR-002 (MEDIUM, changed and a new MEDIUM+ finding ID on the file) (STORY-0113): SHA-256 per user-global + cwd-root instruction file (AGENT_INSTRUCTION_PATTERNS, no walk, cwd skipped when $HOME, project symlinks skipped) in <state dir>/instruction-files.json (or beside an explicit rug-pull state path; 0o600, hashes + finding IDs only, 10,000 records); user-global memory files (CLAUDE.md, rules, ~/.codex/AGENTS.md, OpenClaw) get MEM-004/005 run here for INSTR-002 only (not reported); only content IDs (MEM-/SKILL-/POISON-/AGENT-/HOOK-) count, last 8 hashes remembered so a seen version never re-escalates; writes are atomic (temp + os.replace) under a .lock file after re-reading (merge), an unreadable file is never overwritten, a non-record file is kept as .corrupt; _run_static_pipeline step 5c, every scan with no explicit path incl. --project (cwd root + user files, not the project tree; not --path, pin/diff); first sighting and removal silent; never raises
-│   ├── reach.py       # MEM-003/MEM-004/MEM-005 in the default scan (cwd root + ~/.openclaw/workspace/HEARTBEAT.md, via scanner._cwd_instruction_reach_findings) and scan --project (cli/scan._apply_project_instruction_reach); never raises
-│   ├── framing.py     # STORY-0141 describes-vs-directs gate, fail-closed (PR #263 review): FileFraming(text) splits blocks once (headings, closed fences, quotes, lists, paragraphs; closing-fence tables keep it linear) and classify(start, end) is directed unless a positive frame says described (short negated clause opening with its negation; checklist or descriptive list item under a detection lead-in — flag/detect/look for/red flags/indicators, not review/audit/checklist; describing sentence; descriptive quote), judged over the whole list item; fenced code, a destination in the line/sentence/item (URL/email/IP/host after 'to'/Markdown link/pipe/curl...), a later clause giving an order, table rows/callouts and sentences addressed to the agent are always directed; obfuscated files (POISON-040/060) get no downgrade; regression strings in tests/test_agent_files_framing_bypasses.py; SKILL-001 only
-│   ├── analyzer.py    # analyze_agent_files(); imports PATTERNS from analyzers/poisoning.py (never forked), plus scan_concealed_channels/build_concealment_finding for POISON-041..045; SKILL-001 reports the first directed occurrence or INFO "described, not directed" (framing.py), failing closed when the file has any concealment channel or a pattern matches more than 256 times; SKILL-001/002, MEM-001/002 and POISON-04x evidence starts `Line N:` (file line, frontmatter counted) with the redacted line (STORY-0141); MEM-001 = memory_override_match() or POISON-070 (STORY-0099); calls skill_package.sidecar_findings for a skill's other prose files; MEM-003/004 via analyze_instruction_reach(); imported files get the importer's rules, secrets redacted. NB: HOOK-001/002 live in analyzers/config_hygiene.py, not here
-│   ├── skill_package.py # STORY-0095: every file in a skill folder; STORY-0159: USER_SKILL_DIRS / PROJECT_SKILL_DIRS are the one table of skills directories (Claude Code first; .agents/skills = client agent-skills; .gemini, .cursor, .codex (Cursor compat), .copilot (user), .github (project); vendor docs cited there), SkillPackage.client names the agent on findings, skills-dir plugins only in Claude Code's directory, a skill reached from several directories read once (_first_per_skill, table order); (SKILL-005..008), default scan/check (scanner._discover_and_parse → scan_default_skills) and scan --project (cli/scan._apply_project_skills; a skills-dir plugin's config is listed once, as claude-code-plugin, and not re-analysed when the default scan already did); a nested SKILL.md folder is its own package only when discovery returns it (else walked with the parent); .git text records are read, git binaries magic-checked; follows a symlink directly under a skills dir one level when it points at a skill (TRUST-004 INFO; a repo link leaving the repo is TRUST-002 HIGH, not read; decision 2026-10-26) and no other symlink (TRUST-002/004/005), O_NOFOLLOW reads under per-file/per-skill/per-scan budgets, errors → ScanResult.errors; skills-directory plugin (.claude-plugin/plugin.json) servers join discovery as "claude-code-plugin" (discovery._skills_dir_plugin_configs); carried .mcp.json routed through per-server analyzers as "claude-code-skill" (never discovered; check never offers `fix`)
-│   ├── install_steps.py # STORY-0095: pure text/byte checks (no I/O): SKILL-005 install-step shapes with per-file literal gates (parity-tested), SKILL-006 text shapes, SKILL-007 format/blob identification, redact()
-│   └── subagents.py   # Claude Code subagent definitions (STORY-0094): frontmatter read the way Claude Code's loader reads it (1 MiB file cap, split at the first `---` anywhere, quote-and-retry on a YAML error) plus the `---`-line reading, findings from both; repeated/unreadable security keys are findings; node/nesting/alias budgets; agent_mcp_servers() (one server per item, repeats `name#2`), analyze_agent_definition() AGENT-001..004; files join default discovery as client "claude-code-agent" (discover_configs(include_agents=True); never with --path; lock opts out; auto-verify skips them and lists project ones under a lock root in `lock_status.not_covered`; rug-pull state key excludes), step 0 via ConfigHygieneAnalyzer.analyze_agent_definition (+HOOK-001/002)
-├── plugins/           # Claude Code plugin inventory + integrity (PLUGIN-001/002); offline, reads ~/.claude/plugins records only
-│   ├── models.py      # InstalledPlugin dataclass; GIT_SOURCE_TYPES; pinned_sha / source_type
-│   ├── discovery.py   # discover_installed_plugins(), plugin_agent_files(), plugin_mcp_config_paths(); plugin MCP servers join default auto-discovery (discover_configs(include_plugins=True) is the default; never with an explicit --path; lock opts out; lock auto-verify skips them, listing a repository's skills-directory plugin servers under a lock root in `lock_status.not_covered`; excluded from the rug-pull state key) as client "claude-code-plugin" — skills-directory plugins (`~/.claude/skills/<name>/.claude-plugin/plugin.json`, cwd `.claude/skills/…`) join the same way (STORY-0095), except that the cwd's are `is_project_scoped` and stay in the rug-pull state key so one repository's plugin servers never show up as RUGPULL-003 in another's scan
-│   ├── analyzer.py    # analyze_plugin_integrity() — PLUGIN-001 (recorded version != pinned sha prefix), PLUGIN-002 (unpinned git source)
-│   ├── checkout.py    # PLUGIN-003/004 (STORY-0096): the marketplace pin vs the commit the plugin checkout actually resolves to (Plugin4Shell, AIR Security); reads git files, never runs git
-│   └── mods.py        # Claude Code mods (STORY-0085): discover_mods() (installed plugins, ~/.claude/dev-mods, CLAUDE_CODE_PLUGIN_DIRS), static read of hooks modules (never executed), read_guard_state() (managed-settings file), analyze_mods() MOD-001..005, analyze_plugin_dirs_setting() MOD-006; wired into default discovery next to PLUGIN-001/002
-├── ci_workflows/      # GitHub Actions workflows that run an AI agent (WORKFLOW-001..003, STORY-0091); YAML read with safe_load, never run
-│   ├── discovery.py   # discover_workflow_files(): <root>/.github/workflows/*.y{a,}ml (top level only); walk=True (--project) adds nested repo roots (a .git entry); a symlinked .github or workflows dir is not read and every file must resolve inside root; 256 KiB per file, 4 MiB per call; size/budget skips and an unreadable workflow dir or file (stat(), not is_dir(), which hides EACCES from 3.13) reported to the caller's errors; every probe catches OSError
-│   └── analyzer.py    # analyze_workflow_files(): steps using claude-code-action / claude-code-security-review / run-gemini-cli × stranger-writable trigger × secret in with/env × write (or absent) permissions × tool posture per vendor docs; workflow_call evaluated once per local caller path (triggers + token ceiling); every pass over untrusted text is linear — ${{ }} extraction (no lazy-dot regex), whole-shell rule matching (no adjacent \s* quantifiers), claude_args splitting (_posix_split, not shlex, whose per-char token concatenation is quadratic); parse cached by SHA-256 of the bytes
-├── lock/              # mcp-lock.json (ADR-0005): committable record of approved servers
-│   ├── model.py       # ownership boundary + top-level checksum ({lock_version, generated_by, servers}); LOCK_VERSION 2, SUPPORTED_LOCK_VERSIONS, ResolutionContext
-│   ├── writer.py      # regenerate()/write_lock(); foreign sections preserved; owned `tools` merged
-│   ├── verifier.py    # lock --verify: LOCK-001..005, LOCK-006..009 with --connect; lock_version 1 and 2 (STORY-0116): v2 adds LOCK-011/012 (section digests, canonical bytes) and LOCK-010 under --resolve; a v1 lock verifies exactly as before (tests/test_lock_v2.py vs tests/fixtures/lock_v1_corpus); a newer version → exit 2
-│   ├── section_digests.py # lock_version 2 `section_digests`: per-section SHA-256 of the RFC 8785 encoding; each producer writes its own entries, keeps the rest verbatim (merge/check/noncanonical_sections)
-│   ├── guardrail_section.py # `guardrails` section (STORY-0143): the repository's own .claude/settings.json, .codex/config.toml, .gemini/settings.json (never settings.local.json or home files) as path → {digest, record}; own _producer/_schema_version/_checksum like `tools`; top-level checksum unchanged; lock --verify LOCK-014 (HIGH, fails exit code) per loosening via guardrails.compare; --accept re-records
-│   ├── tool_digests.py # `tools` section (STORY-0086): per-tool definition/contract digests, own _checksum; optional per-tool `calendar` {day, dates, undated} when `day=` is given and the text holds an ISO date (STORY-0180); compare() puts a tool whose digests differ only by dates that followed the calendar in ToolDiff.calendar_only (no finding; VerifyResult.calendar_only, `calendar_only` in `lock --verify --format json`; ToolGuard approves it)
-│   ├── calendar_text.py # the one calendar rule (STORY-0179/0180), stdlib only (on the `run` launch path): without_dates() cuts real ISO dates out of every string (a string becomes the list of its pieces), moved_with_calendar() (same undated digest; each date equal, moved by the days between the records, or a 1st of a month moved by the months), followed_calendar() tries each day one day earlier and later (server clock vs UTC); scripts/drift_snapshot.py imports without_dates, scripts/drift_compare.py keeps a stdlib copy of moved_with_calendar that tests/test_lock_calendar.py holds equal
-│   ├── tool_text.py    # saved tool text `mcp-lock.tools.json` (STORY-0123, #215): store/load, trusted only if it hashes to the lock digest; field + word diffs; POISON over added words
-│   ├── core.py        # stdlib-only primitives shared with `run`: LOCK_FILENAME/versions, match_key, index_locked_entries, find_lock_for (re-exported by model/identity/discovery/verifier)
-│   └── identity.py, resolve.py (bare spec → "*", resolution_context), discovery.py, auto_verify.py
-├── advisory/          # OSV 1.6.0 advisory records + signed feed (credenzo advise / feed verify)
-│   ├── __init__.py    # Package marker; re-exports Advisory, build_advisory, write_feed, sign_feed, verify_feed
-│   ├── schema.py      # Advisory dataclass → OSV 1.6.0 JSON; stable `x_MCPSA-<12hex>` IDs; MCP metadata under affected[].database_specific; FINDING_CLASS_TO_OWASP + owasp_for(); rejects codes owasp_mcp.py does not define
-│   ├── classify.py    # finding ID → finding_class / observation / CVSS 3.1 vector (cvss_base_score reconciliation); owasp_codes_for() validates against owasp_mcp.py; is_advisable() excludes non-vulnerability findings
-│   ├── canonical.py   # RFC 8785 JCS canonicalization (UTF-16 key order, ECMAScript number format) — the bytes that get signed; depth/size bound (CanonicalError)
-│   ├── freshness.py   # snapshot_version / published_at / expires on index.json only; TTL; seen.json keyed on signing identity
-│   ├── feed.py        # build_advisory / build_advisories / write_feed (advisories/, index.json, osv/all.json+zip); resolve_package, redact; feed_version 1.1
-│   ├── sign.py        # cosign (default) + minisign backends, static project key; sign_feed / verify_feed / feed_is_signed; signing block embedded in index.json
-│   ├── validate.py    # validate_osv() against the vendored schema; ValidationUnavailableError when jsonschema is absent
-│   └── osv_schema/    # Vendored osv-1.6.0.json — pinned, offline, bundled in wheel and PyInstaller binary
-├── attestation/       # Supply-chain integrity verification (Layer 1 hashes, Layer 2 Sigstore)
-│   ├── __init__.py    # Package marker
-│   ├── hasher.py      # HashResult dataclass; compute_hash_from_file/url; resolve_npm/pip_tarball_url; verify_package_hash
-│   ├── verifier.py    # verify_server_hashes(); extract_version_from_server(); bridges registry → hasher → Finding objects
-│   ├── sigstore_client.py   # Layer 2 Sigstore bundle discovery/verification via npm + PyPI registry APIs
-│   └── sigstore_findings.py # AttestationResult → Finding translation for Layer 2 Sigstore verification
+├── cli/                           # Typer app; one submodule per command group
+│   ├── __init__.py                # `app` and sub-apps; re-exports the names tests patch
+│   ├── __main__.py                # `python -m mcp_audit.cli` (PyInstaller target)
+│   ├── _helpers.py                # `_write_output`
+│   ├── scan.py                    # scan, discover, pin, watch (`_apply_*` stages, `_write_*` output)
+│   ├── check.py                   # check: one-page verdict
+│   ├── fix.py                     # fix: safe remediations
+│   ├── wrap.py                    # wrap / unwrap: launch local servers through `credenzo run`
+│   ├── run.py                     # `run` in --help; `_entry.py` dispatches it to runtime/
+│   ├── guard.py                   # `guard` in --help; `_entry.py` dispatches it to runtime/guard.py
+│   ├── diff.py                    # diff: MCP-aware diff for PR review and CI gates
+│   ├── baseline.py                # baseline: save / list / compare / delete / export
+│   ├── registry.py                # update-registry, verify
+│   ├── rules.py                   # rule: validate / test / list
+│   ├── policy.py                  # policy: validate / init / check
+│   ├── extensions.py              # extensions: discover / scan
+│   ├── agent_files.py             # agent-files: discover / scan
+│   ├── plugins.py                 # plugins: discover / scan
+│   ├── lock.py                    # lock: write, --verify, --accept mcp-lock.json
+│   ├── _bundle.py                 # --bundle / --bundle-key for scan and affected
+│   ├── sast.py                    # sast
+│   ├── sbom.py                    # sbom: CycloneDX 1.5
+│   ├── affected.py                # affected: is this advisory in a discovered server?
+│   ├── reach.py                   # reach: what can the agents on this machine touch?
+│   ├── vet.py                     # vet: pre-install package verdict
+│   ├── shadow.py                  # shadow: shadow MCP server sweep
+│   ├── killchain.py               # killchain: top blast-radius-cutting changes
+│   ├── snapshot.py                # snapshot: signed forensic snapshots
+│   ├── dashboard.py               # dashboard
+│   ├── fleet.py                   # merge: fleet report from scan JSON files
+│   ├── push_nucleus.py            # push-nucleus: scan and upload to Nucleus
+│   ├── register.py                # register: opt-in registration
+│   ├── advise.py                  # advise and `feed verify`
+│   └── version.py                 # version
+├── scanner.py                     # Orchestrator: discovery → parsing → `_run_static_pipeline` → score
+├── scoring.py                     # Score 0–100 and grade A–F (docs/scoring.md)
+├── discovery.py                   # Finds MCP config files across all supported clients
+├── config_parser.py               # Parses JSON configs, normalizes across client formats
+├── models.py                      # Pydantic models: Finding, ServerConfig, ScanResult, ScanScore, …
+├── owasp_mcp.py                   # Single source of truth for OWASP MCP Top 10 codes/names
+├── verdict.py                     # Pure verdict builder for `vet`
+├── watcher.py                     # `watch` filesystem watcher
+├── mcp_client.py                  # Live MCP connection for --connect
+├── _paths.py                      # Find bundled data in source, wheel and frozen builds
+├── _network.py                    # --offline mutual exclusion for network flags
+├── _entry.py                      # Console script; dispatches `run` and `guard` before Typer loads
+├── _jcs.py                        # RFC 8785 canonical JSON, stdlib only (used by `run`)
+├── runtime/                       # `credenzo run` and `guard`: stdlib only on the launch path (docs/run.md)
+│   ├── cli.py                     # argparse for `run`; exit 78 when enforce refuses
+│   ├── relay.py                   # Byte-exact stdio relay; enforce mode goes line by line
+│   ├── gate.py                    # Launch gate: argv vs the lock entry
+│   ├── wrapping.py                # Wrap and unwrap entries; when a wrapper is trusted
+│   ├── guard.py                   # `credenzo guard`: Claude Code PreToolUse hook
+│   └── tools.py                   # ToolGuard: live tools/list vs the lock's tool digests
+├── _redact.py                     # Local-path redaction for output that leaves the host
+├── bundle.py                      # Signed air-gapped data bundle
+├── gateways.py                    # MCP gateway upstreams (mcptoon, 1MCP, MCPHub)
+├── keys/                          # Feed public key (mcp-audit-feed.pub)
+├── _gitobjects.py                 # Read-only git object store (never runs git)
+├── _gitignore.py                  # gitignore matcher (never runs git)
+├── host_platform.py               # windows / wsl / macos / linux
+├── harness_versions.py            # Installed agent harness versions, read from files
+├── guardrails.py                  # GUARD-001/002: guardrail drift
+├── policy_sources.py              # Read-only OS policy readers (plist, registry)
+├── affected/                      # `affected` engine: query, match, render
+│   ├── transitive.py              # `affected --transitive`
+│   ├── fleet.py                   # `affected --fleet`
+│   ├── vex.py                     # OpenVEX 0.2.0 writer
+│   ├── fixplan.py                 # `affected --fix`
+│   └── respond.py                 # Respond block and --policy-out
+├── exploit/                       # KEV / EPSS / public-PoC signals
+├── analyzers/                     # Detection
+│   ├── base.py                    # BaseAnalyzer abstract class
+│   ├── poisoning.py               # Tool description poisoning detection
+│   ├── credentials.py             # Secret/API key exposure in configs
+│   ├── transport.py               # Transport security
+│   ├── supply_chain.py            # Package provenance and typosquatting detection
+│   ├── hook_runnable.py           # HOOK-004/005: hook commands that cannot start
+│   ├── config_hygiene.py          # CFHYG, HARNESS, HOOK-001/002, TRUST-003/008, PERM-001..006
+│   ├── rug_pull.py                # Config-entry change detection via hashing
+│   ├── toxic_flow.py              # TOXIC-*, INTEG-001: dangerous capability pairs
+│   ├── auth.py                    # Remote server authentication checks
+│   ├── collision.py               # COLLIDE-001..003: tool name and description copies (--connect)
+│   ├── annotations.py             # ANNOT-001: readOnlyHint on a tool that writes
+│   ├── delegation.py              # DELEG-001..003: cross-tool delegation (--connect)
+│   ├── git_exec.py                # TRUST-006/007: git config that can run code
+│   ├── permissions.py             # PERM-001..007: Claude Code permission rules
+│   ├── sandbox.py                 # SANDBOX-001..005: sandbox settings a repository loosens
+│   ├── rule_secrets.py            # CRED-004: credentials in permission rules
+│   ├── rule_secret_history.py     # CRED-005: CRED-004 over git history
+│   ├── shipped_settings.py        # CRED-006: settings an image or npm package ships
+│   ├── managed_policy.py          # MANAGED-001..007: managed MCP policy vs servers
+│   ├── secret_reach.py            # REACH-001..003: credential files readable without a prompt
+│   ├── npx_cache.py               # SC-011: known-malicious packages in the npx cache
+│   └── attack_paths.py            # Attack paths and the greedy hitting set
+├── reach/                         # `reach` engine (pure, no subprocess)
+│   ├── engine.py                  # build_machine_reach(): one verdict per agent
+│   ├── claude.py                  # Claude Code's answers
+│   ├── codex.py                   # Codex answers from config.toml
+│   ├── surface.py                 # Allowlists; anything off them is COULDN'T CHECK
+│   ├── network.py                 # Does a server reach the network?
+│   ├── common.py                  # Shared assessment helpers
+│   ├── context.py                 # Paths and capped reads
+│   ├── models.py                  # Dataclasses; `sanitize()` is the one choke point
+│   └── fleet.py                   # `reach --fleet DIR`
+├── agent_files/                   # Instruction, memory and skill files (SKILL-*, MEM-*)
+│   ├── models.py                  # AgentFile and surfaces
+│   ├── discovery.py               # discover_agent_files()
+│   ├── imports.py                 # Claude Code @path imports and "read X" references
+│   ├── gitignore.py               # .gitignore matcher read by file
+│   ├── heartbeat.py               # MEM-004 detector
+│   ├── sleeper.py                 # MEM-005 detector
+│   ├── exfil.py                   # MEM-006 detector
+│   ├── instruction_shapes.py      # MEM-007/008 detectors
+│   ├── drift.py                   # INSTR-001/002: instruction file drift
+│   ├── reach.py                   # MEM-003..005 in the default scan and --project
+│   ├── framing.py                 # Describes-vs-directs gate for SKILL-001
+│   ├── analyzer.py                # analyze_agent_files()
+│   ├── skill_package.py           # SKILL-005..008: every file in a skill folder
+│   ├── install_steps.py           # Pure text checks for skill install steps
+│   └── subagents.py               # AGENT-001..004: subagent definitions
+├── plugins/                       # Claude Code plugins (PLUGIN-*, MOD-*)
+│   ├── models.py                  # InstalledPlugin dataclass
+│   ├── discovery.py               # Installed plugins and their MCP servers
+│   ├── analyzer.py                # PLUGIN-001/002
+│   ├── checkout.py                # PLUGIN-003/004: pin vs checked-out commit
+│   └── mods.py                    # MOD-001..006: Claude Code mods
+├── ci_workflows/                  # WORKFLOW-001..003: Actions workflows that run an agent
+│   ├── discovery.py               # Find workflow files (bounded)
+│   └── analyzer.py                # Analyze them
+├── lock/                          # mcp-lock.json (ADR-0005, docs/lock.md)
+│   ├── model.py                   # Ownership boundary and top-level checksum
+│   ├── writer.py                  # regenerate()/write_lock()
+│   ├── verifier.py                # lock --verify: LOCK-001..014
+│   ├── section_digests.py         # lock_version 2 section digests
+│   ├── guardrail_section.py       # `guardrails` section (LOCK-014)
+│   ├── tool_digests.py            # `tools` section: per-tool digests
+│   ├── calendar_text.py           # Dates that move with the calendar (stdlib only)
+│   ├── tool_text.py               # saved tool text `mcp-lock.tools.json`
+│   ├── core.py                    # Stdlib-only primitives shared with `run`
+│   └── identity.py, resolve.py, discovery.py, auto_verify.py
+├── advisory/                      # OSV 1.6.0 records and the signed feed (see invariants below)
+│   ├── schema.py                  # Advisory dataclass → OSV 1.6.0 JSON
+│   ├── classify.py                # finding ID → finding_class / observation / CVSS 3.1 vector
+│   ├── canonical.py               # RFC 8785 JCS canonicalization
+│   ├── freshness.py               # snapshot_version / published_at / expires on index.json only
+│   ├── feed.py                    # build_advisory / write_feed
+│   ├── sign.py                    # cosign and minisign backends; sign_feed / verify_feed
+│   ├── validate.py                # validate_osv() against the vendored schema
+│   └── osv_schema/                # Vendored osv-1.6.0.json
+├── attestation/                   # --verify-hashes and Sigstore checks
+│   ├── hasher.py                  # Layer 1: tarball SHA-256
+│   ├── verifier.py                # verify_server_hashes()
+│   ├── sigstore_client.py         # Layer 2: Sigstore bundles from npm and PyPI
+│   └── sigstore_findings.py       # Layer 2 results → findings
 ├── baselines/
-│   ├── __init__.py    # Package marker
-│   └── manager.py     # BaselineManager, Baseline, BaselineServer, DriftFinding, DriftType; save/load/compare
+│   └── manager.py                 # BaselineManager, Baseline, BaselineServer, DriftFinding, DriftType
 ├── registry/
-│   ├── __init__.py    # Package marker
-│   ├── loader.py      # KnownServerRegistry, RegistryEntry, load_registry(); Levenshtein helper; scoped_parts_close() (find_closest_npm compares @scope and name separately, with osa_distance(), STORY-0105); optional RegistryEntry.semver_resumed_at
-│   ├── twins.py       # TwinIndex: unscoped-twin keys derived from registry entries (SC-007, STORY-0097); pure, no I/O
-│   ├── malicious.py   # load_known_malicious(), assess(): registry/known-malicious.json (OSV MAL-*) for SC-008 and vet; tolerant loader with size/entry caps, load_error surfaced in ScanResult.errors
-│   ├── research.py    # load_research_records(), research_id(): credited research findings with no CVE (STORY-0122), `src/mcp_audit/data/research-records.json` (package data, so no packaging edit); OSV-shaped records `x_MCPRS-<12 hex>`, products as the write-up names them with fixed_in only when stated, optional `introduced` (PEP 440; an install below it is NOT AFFECTED) and `platforms` (subset of windows/wsl/macos/linux; a host outside it is NOT AFFECTED, an undeterminable host COULDN'T CHECK; bad values skip the record, STORY-0142; golden `affected` rows for the older records in `tests/golden/affected_research_rows.json`), `checks` = Credenzo finding IDs that test the condition; tolerant loader (bad entry skipped and reported); docs/research-records.md
-│   └── reachability.py # transport tags on known_vulns (affected_transports/requires_auth/verified_by): tags_of, provably_stdio, not_reachable; used by affected/match.py RegistryRule and supply_chain SC-004 (STORY-0125)
+│   ├── loader.py                  # KnownServerRegistry, RegistryEntry, load_registry()
+│   ├── twins.py                   # SC-007 unscoped twins
+│   ├── malicious.py               # load_known_malicious(), assess()
+│   ├── research.py                # load_research_records(), research_id()
+│   └── reachability.py            # Transport tags on known CVEs
 ├── rules/
-│   ├── __init__.py    # Package marker
-│   └── engine.py      # PolicyRule, RuleMatch, MatchCondition, RuleEngine; load_rules_from_file/dir; load_bundled_community_rules; a condition's optional `report:` label replaces the field content as matched value; matched values redacted (secret flag values, URL userinfo, SECRET_PATTERNS) before they reach a finding (STORY-0105)
+│   └── engine.py                  # Policy-as-code rule engine
 ├── governance/
-│   ├── __init__.py    # Package marker
-│   ├── models.py      # GovernancePolicy, ApprovedServers, ScoreThreshold, TransportPolicy, RegistryPolicy, FindingPolicy, ClientOverride, PolicyMode
-│   ├── loader.py      # load_policy(); resolution order: explicit → cwd → repo root → user config
-│   └── evaluator.py   # evaluate_governance(); per-server policy checks; produces Finding objects with analyzer="governance"
-├── vulnerability/     # OSV.dev CVE lookups for `scan --check-vulns` (network, opt-in)
-│   ├── __init__.py    # Package marker
-│   ├── models.py      # ResolvedPackage, VulnAdvisory data models
-│   ├── resolver.py    # extract_package() (version may be None: `npx -y pkg`), extract_ecosystem_and_version(); resolve_latest_version() from a ServerConfig
-│   ├── depsdev.py     # fetch_dependency_graph() → DependencyGraph (relation SELF/DIRECT/INDIRECT, error, incomplete; 8 MiB cap); fetch_transitive_deps() wrapper for sbom
-│   ├── osv.py         # query_vulns_batch() (IDs only on OSV.dev) + enrich_advisories()/fetch_vuln_details() (/v1/vulns/{id}, distinct IDs, 256 / 120 s / 4 MiB budgets); severity_from_record(): CVSS v3 → database_specific → MAL-* CRITICAL → unrated (STORY-0106)
-│   └── scanner.py     # check_vulnerabilities(errors=result.errors) — resolver → depsdev → osv → VULN-<OSV-ID>, VULN-UNPINNED, VULN-UNRESOLVED (INFO: a lookup that could not run; non-advisory)
-├── diff/              # MCP-aware diff engine (credenzo diff)
-│   ├── __init__.py    # Package marker
-│   ├── loader.py      # Load diff inputs (directory, JSON scan file, or git SHA) into ServerConfig lists
-│   ├── comparator.py  # Compare two ServerConfig lists → flat list of Change objects
-│   ├── risk.py        # Risk classification for diff changes
-│   └── render.py      # Render diff to terminal, JSON, and PR-comment Markdown
-├── fixer/             # Safe-remediation engine (credenzo fix)
-│   ├── __init__.py    # Package marker
-│   ├── fixer.py       # Fixer orchestrator — load config, apply strategies, write atomically with .bak
+│   ├── models.py                  # Governance policy models
+│   ├── loader.py                  # load_policy() resolution order
+│   └── evaluator.py               # evaluate_governance()
+├── vulnerability/                 # `scan --check-vulns` (network, opt-in)
+│   ├── models.py                  # ResolvedPackage, VulnAdvisory data models
+│   ├── resolver.py                # Package and version from a launch line
+│   ├── depsdev.py                 # fetch_dependency_graph() → DependencyGraph
+│   ├── osv.py                     # OSV.dev queries
+│   └── scanner.py                 # check_vulnerabilities()
+├── diff/                          # MCP-aware diff engine
+│   ├── loader.py                  # Load diff inputs (directory, scan JSON, git SHA)
+│   ├── comparator.py              # Compare two ServerConfig lists → flat list of Change objects
+│   ├── risk.py                    # Risk classification for diff changes
+│   └── render.py                  # Render diff to terminal, JSON, and PR-comment Markdown
+├── fixer/                         # `fix` engine: backup, then atomic write
+│   ├── fixer.py                   # Orchestrator
 │   └── strategies/
-│       ├── __init__.py     # Package marker
-│       ├── base.py         # FixStrategy abstract base
-│       ├── credentials.py  # CRED-001/002/003 — redact plaintext secrets with ${ENV_KEY}
-│       ├── transport.py    # TRANSPORT-001 — upgrade http:// URLs to https://
-│       └── pinning.py      # SC-001/002 — replace typosquat with verified registry name @version
-├── killchain/         # Decision engine over the attack-path graph (credenzo killchain)
-│   ├── __init__.py    # Package marker
-│   ├── recommender.py # Rank kill switches from the hitting-set output by incremental path reduction
-│   ├── simulator.py   # What-if simulation: re-run summarize_attack_paths against the modified server list
-│   ├── patches.py     # Generate governance-policy denylist / PR-comment patch snippets
-│   └── render.py      # Markdown and JSON output formatters for killchain results
-├── shadow/            # Shadow MCP server detection (credenzo shadow)
-│   ├── __init__.py    # Package marker
-│   ├── allowlist.py   # Operator allowlist of sanctioned servers; load/match
-│   ├── classifier.py  # Pure sanctioned-vs-shadow classification given server + allowlist
-│   ├── risk.py        # RiskLevel scoring for a single server (toxic-flow capability logic)
-│   ├── events.py      # Structured events for --continuous daemon mode (new_shadow_server, server_drift, server_removed)
-│   └── state.py       # first_seen/last_seen state at <user-config-dir>/mcp-audit/shadow/state.json (0o600)
-├── snapshot/          # Forensic snapshot rehydrate/diff (credenzo snapshot)
-│   ├── __init__.py    # Package marker
-│   ├── rehydrate.py   # Reconstruct the historical attack-path graph from a recorded snapshot JSON
-│   └── diff.py        # "What changed since the snapshot?" — servers added/removed/changed
-├── output/
-│   ├── __init__.py    # Package marker
-│   ├── base.py        # BaseFormatter abstract class — all formatters inherit this
-│   ├── terminal.py    # Rich-formatted console output (default); renders score/grade panel
-│   ├── sarif.py       # SARIF for GitHub Security integration
-│   ├── nucleus.py     # Nucleus FlexConnect formatter
-│   ├── dashboard.py   # Self-contained HTML dashboard with embedded D3 v7 graph and grade badge
-│   ├── check.py       # One-page security verdict formatter for `credenzo check` (_HINTS)
-│   ├── advisory.py    # AdvisoryFormatter(BaseFormatter) — ScanResult → JSON array of OSV 1.6.0 records; byte-identical to feed/osv/all.json (feed *directories* stay in advisory/feed.py)
-│   ├── cyclonedx.py   # CycloneDX SBOM formatter (supports cyclonedx-python-lib 7.x–11.x)
-│   ├── snapshot.py    # Snapshot formatters: CycloneDX AI/ML-BOM and native JSON
-│   ├── pdf.py         # Letter-size PDF compliance report (credenzo scan --report pdf)
-│   ├── reach.py       # Terminal output for `reach` (reads MachineReach.to_dict(), so every string is already redacted; Rich markup escaped) and the fleet table
-│   └── reach_pdf.py   # `reach --report pdf`: ReachPdfFormatter reuses pdf.py's header/footer/palette; KeepInFrame(shrink) keeps one machine on one page
+│       ├── base.py                # FixStrategy abstract base
+│       ├── credentials.py         # CRED-001..003
+│       ├── transport.py           # TRANSPORT-001
+│       └── pinning.py             # SC-001/002
+├── killchain/                     # Decision engine over the attack-path graph
+│   ├── recommender.py             # Rank kill switches
+│   ├── simulator.py               # What-if simulation
+│   ├── patches.py                 # Generate governance-policy denylist / PR-comment patch snippets
+│   └── render.py                  # Markdown and JSON output
+├── shadow/                        # Shadow MCP server detection
+│   ├── allowlist.py               # Operator allowlist of sanctioned servers
+│   ├── classifier.py              # Pure sanctioned-vs-shadow classification given server + allowlist
+│   ├── risk.py                    # RiskLevel scoring for a single server
+│   ├── events.py                  # Structured events for --continuous daemon mode
+│   └── state.py                   # first_seen / last_seen state (0o600)
+├── snapshot/                      # Forensic snapshot rehydrate/diff
+│   ├── rehydrate.py               # Rebuild the attack-path graph of a snapshot
+│   └── diff.py                    # "What changed since the snapshot?"
+├── output/                        # Formatters (BaseFormatter)
+│   ├── base.py                    # BaseFormatter abstract class
+│   ├── terminal.py                # Rich-formatted console output
+│   ├── sarif.py                   # SARIF for GitHub Security integration
+│   ├── nucleus.py                 # Nucleus FlexConnect formatter
+│   ├── dashboard.py               # Self-contained HTML dashboard (one template string)
+│   ├── check.py                   # `check` verdict
+│   ├── advisory.py                # OSV records for `scan --format advisory`
+│   ├── cyclonedx.py               # CycloneDX SBOM formatter
+│   ├── snapshot.py                # Snapshot formatters: CycloneDX AI/ML-BOM and native JSON
+│   ├── pdf.py                     # PDF compliance report
+│   ├── reach.py                   # Terminal output for `reach`
+│   └── reach_pdf.py               # `reach --report pdf`
 ├── extensions/
-│   ├── __init__.py    # Package marker
-│   ├── models.py      # ExtensionManifest, ExtensionVulnEntry Pydantic models
-│   ├── discovery.py   # discover_extensions(), parse_manifest(); EXTENSION_PATHS per-client config
-│   ├── policy.py      # EXTPOL-001..003 (STORY-0144): is the editor's AllowedExtensions allowlist enforced by policy (VS Code / Cursor / Windsurf documented locations only) or only in user settings; silent when absent or the policy location is undocumented, EXTPOL-001 (enforced inventory) is in scoring.INVENTORY_ONLY_IDS (not scored, left out of `check`); injectable Environment; extension_policy_findings() runs in scanner._discover_and_parse (no explicit path); docs/extension-policy.md
-│   └── analyzer.py    # analyze_extensions(); check_known_vulns, check_permissions, check_wildcard_activation, check_provenance, check_sideloaded, check_stale; load_vuln_registry()
+│   ├── models.py                  # Extension models
+│   ├── discovery.py               # discover_extensions(), parse_manifest()
+│   ├── policy.py                  # EXTPOL-001..003: editor extension allowlists
+│   └── analyzer.py                # analyze_extensions()
 ├── registration/
-│   ├── __init__.py    # Package marker; privacy-invariant docs
-│   ├── models.py      # RegistrationConfig, RegistrationPostPayload, RegistrationPingPayload Pydantic models
-│   ├── manager.py     # load/save/clear_registration(); build_registration(); 0o600 file write; platformdirs storage
-│   └── client.py      # post_registration() (PII POST, once); post_ping() (no-PII, per `check` run); _REGISTER_ENDPOINT constant (docs/privacy.md must name it; tests/test_registration.py checks); urllib.request only
+│   ├── models.py                  # Registration payload models
+│   ├── manager.py                 # Load, save, clear (0o600)
+│   └── client.py                  # post_registration() / post_ping()
 ├── sast/
-│   ├── __init__.py    # Package marker
-│   ├── runner.py      # SastResult; find_semgrep(); find_rules_dir(); run_semgrep(); parse_semgrep_output(); severity mapping
-│   └── bundler.py     # get_bundled_rules_path() — resolves semgrep-rules/ in PyInstaller builds
+│   ├── runner.py                  # Run semgrep and map its output
+│   └── bundler.py                 # Bundled rule path in frozen builds
 ├── fleet/
-│   ├── __init__.py    # Package marker
-│   └── merger.py      # FleetMerger, MachineReport, DeduplicatedFinding, FleetStats, FleetReport; fleet HTML generation
+│   └── merger.py                  # Fleet merge and HTML
 └── data/
-    ├── known_npm_packages.yaml  # Legacy npm package list (retained for reference; superseded by registry)
-    ├── exploit-signals.json     # KEV / EPSS / public-PoC snapshot (STORY-0124; refreshed by scripts/sync_exploit_signals.py)
-    ├── research-records.json    # Credited research records with no CVE (STORY-0122)
-    ├── header_dark.png          # Header image for the PDF report
-    └── d3.v7.min.js             # Bundled D3 v7 (embedded inline in dashboard HTML)
+    ├── known_npm_packages.yaml    # Legacy npm package list
+    ├── exploit-signals.json       # KEV / EPSS / public-PoC snapshot
+    ├── research-records.json      # Credited research records with no CVE
+    ├── header_dark.png            # Header image for the PDF report
+    └── d3.v7.min.js               # Bundled D3 v7
 ```
 
 Standalone rule pack at repo root:
@@ -372,7 +342,7 @@ Standalone rule pack at repo root:
 Data files at project root:
 - `registry/known-servers.json` — curated dataset of 56 known-legitimate MCP servers; queried by the supply chain analyzer for typosquatting detection and by the toxic flow analyzer for authoritative capability tags (`RegistryEntry.capabilities`); ships in both the pip wheel and PyInstaller binary
 - `registry/known-malicious.json` — mirror of OSV `MAL-*` records for npm/PyPI packages whose name contains `mcp` or that the registry lists (STORY-0097); written only by `scripts/sync_registry_advisories.py --write` (bulk export; a mirror, so withdrawn records are removed); matched offline by exact name for SC-008 and `vet`; ships in the wheel and all four specs; `update-registry` does not refresh it. Kept out of `known-servers.json` so the registry schema is unchanged
-- `rules/community/` — 42 bundled community rules total: 41 real detection rules (`COMM-001` through `COMM-039`; `COMM-032` is intentionally reserved/unissued — see `PROVENANCE.md`) plus `STDIO-001`/`STDIO-002a`/`STDIO-002b` (launch-command trust boundary, STORY-0067; `STDIO-001` ships `enabled: false` — see `GAPS.md`) plus `TEMPLATE.yml` itself, which loads as the always-inert `COMM-000` (contribution template — `tests/test_rules.py` guarantees it never fires on a real config); `BOUNTY.md` (bounty program terms) ships alongside but is not a rule file. All ship in both pip wheel and PyInstaller binary and are available to every user with no gating — but "available to" is not "runs for": 38 of the 39 real rules run by default, and `STDIO-001` does not run for anyone (`enabled: false`, no governance-policy toggle exists to turn it on — see `GAPS.md`); see `docs/writing-rules.md` and `docs/contributing-rules.md`
+- `rules/community/` — 42 bundled community rules total: 41 real detection rules (`COMM-001` through `COMM-039`; `COMM-032` is intentionally reserved/unissued — see `PROVENANCE.md`) plus `STDIO-001`/`STDIO-002a`/`STDIO-002b` (launch-command trust boundary, STORY-0067; `STDIO-001` ships `enabled: false` — see `GAPS.md`) plus `TEMPLATE.yml` itself, which loads as the always-inert `COMM-000` (contribution template — `tests/test_rules.py` guarantees it never fires on a real config); `BOUNTY.md` (bounty program terms) ships alongside but is not a rule file. All ship in both pip wheel and PyInstaller binary and are available to every user with no gating — but "available to" is not "runs for": 40 of the 41 real rules run by default, and `STDIO-001` does not run for anyone (`enabled: false`, no governance-policy toggle exists to turn it on — see `GAPS.md`); see `docs/writing-rules.md` and `docs/contributing-rules.md`
 
 GitHub Action at project root:
 - `action.yml` — composite GitHub Action definition; allows any repo to wire Credenzo into CI with a single workflow addition; inputs: `config-paths`, `severity-threshold`, `sarif-output`, `upload-sarif`, `check-vulns`, `verify-signatures`, `run-sast`, `sast-path`, `baseline-name`, `fail-on-findings`, `version`; outputs: `findings-count`, `grade`, `sarif-path`. Uses `github/codeql-action/upload-sarif` (v4, pinned to a commit SHA like every third-party `uses:` ref in `action.yml`, `setup-action/` and `.github/` — `tests/test_action_yaml.py::test_every_third_party_action_ref_is_sha_pinned`) with `continue-on-error: true` so repos without Code Scanning enabled still run cleanly. Marketplace-ready — passes `tests/test_action_yaml.py` structural and safety checks.
@@ -530,30 +500,13 @@ following silently breaks downstream consumers, so treat them as contract:
   `scan --advisory-feed` skips matching, emits `feed_status`, and still completes.
   There is no `--allow-expired`. Client `seen.json` is keyed on the signing identity
   (workflow ref + OIDC issuer), not a certificate fingerprint; changing that identity
-  resets rollback protection. Do not make the first signed publish until
-  `.github/workflows/advisory-feed-publish.yml` is the publisher (Amendment 7).
-  As of R30 it is: the `build`/`publish` split commits the feed to a fetchable
-  `feed` branch. As of R32, Amendment 7's gate is fully satisfied: a real
-  minisign project key exists (private half in the `MCP_AUDIT_FEED_SIGNING_KEY`
-  secret, scoped to the `feed-signing` GitHub environment restricted to `main`;
-  public half committed at `keys/mcp-audit-feed.pub` and bundled in the
-  package), `build` signs every scheduled publish and verifies its own output
-  before `publish` ever sees it, and the first real signed publish has shipped.
-  That first publish (2026-09-07T19:40:39Z, snapshot_version 4) shipped
-  `index.json` with a `signing` block but no `index.json.sig` — `publish`'s
-  "Replace the published feed content" step copied `advisories/`, `osv/`, and
-  `index.json` from the candidate artifact but never the sibling `.sig` file
-  `sign_feed()` writes next to the index (advisory `.sig` files were
-  unaffected; they live inside `advisories/`, copied wholesale). CI's own
-  verify step never caught this because it only ever checks the candidate
-  artifact pre-`publish`, never the post-`publish` branch content. Caught the
-  same day by a disposable `unshare --net` proof against the live feed
-  (23/24 artifacts OK, `index.json` FAILED with "Missing signature artifact
-  index.json.sig"); fixed with one added `cp` line
-  (`test_publish_copies_index_json_sig_alongside_index_json` pins it) and
-  re-published. The corrected bytes (snapshot_version 5) were re-verified
-  offline the same way: all 24 artifacts OK, and a one-byte tamper of a
-  downloaded advisory still fails offline. A stateless client accepts any unexpired validly-signed snapshot; TTL is the only
+  resets rollback protection. `.github/workflows/advisory-feed-publish.yml` is the
+  only publisher; the minisign project key's private half is the
+  `MCP_AUDIT_FEED_SIGNING_KEY` secret (environment `feed-signing`, `main` only) and
+  the public half is `keys/mcp-audit-feed.pub`. `publish` must copy
+  `index.json.sig` with `index.json`
+  (`test_publish_copies_index_json_sig_alongside_index_json`; the first signed
+  publish, 2026-09-07, shipped without it). A stateless client accepts any unexpired validly-signed snapshot; TTL is the only
   lever. Stolen key, a publisher omitting advisories at a new version, a client clock
   in the past, and mix-and-match (already bound by `canonical_sha256`) are not covered.
 - **Publishing is two-phase.** `write_feed()` emits the unsigned index; `sign_feed()`
@@ -660,20 +613,11 @@ if this step is skipped.
 - Type hints on ALL function signatures
 - Docstrings on all public functions and classes
 
-**pip-audit status (2026-04-17):** `pip-audit` returns zero findings after bumping `cryptography` to `>=46.0.6,<47.0` to resolve CVE-2026-26007 (EC subgroup validation, fixed 46.0.5) and CVE-2026-34073 (DNS name constraint bypass, fixed 46.0.6). The lockfile resolves to `cryptography==46.0.7`.
-
-**Bandit status (2026-04-17):** `bandit -r src/ -ll` returns zero medium+ findings.
-Three B310 (`urllib.request` URL open) calls are intentionally suppressed via
-`# nosec B310` with inline justifications:
-- `attestation/hasher.py:67` — `urlretrieve` called only after an explicit
-  `https://` scheme guard; URL is always an npm registry HTTPS tarball URL.
-- `attestation/hasher.py:123` — `urlopen` target is always `https://pypi.org/…`
-  (produced by `resolve_pip_tarball_url`; scheme guard in caller validates it).
-- `cli/registry.py` (`update_registry`) — `urlopen` target is
- `_UPDATE_REGISTRY_URL`, a hardcoded `https://raw.githubusercontent.com/…`
- constant.
-All three suppressions carry the rule ID and a one-line reason. No blanket
-`# nosec` without a rule ID exists anywhere in the codebase.
+**Bandit** must report no medium or higher issue. A suppression is
+`# nosec <rule id>` with a one-line reason, never a bare `# nosec`
+(`grep -rn --include=*.py "nosec" src/ | grep -v "nosec B[0-9]"` prints nothing). Bandit does not
+flag a TLS context with `verify_mode = CERT_NONE`: review any change to `ssl` use
+by hand (`push-nucleus` shipped with checks off until 2026-11-21).
 
 ### When to flag for Opus review
 
@@ -690,7 +634,7 @@ What each feature does is in `README.md`, `docs/README.md` (the index of every d
 Counts that `scripts/update_test_count.py` keeps in sync:
 
 - 8 analyzers: poisoning, credentials, transport, supply chain, rug-pull, toxic flow, config hygiene, auth
-- 11212 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
+- 11235 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
 - 35 top-level CLI commands: affected, vet, reach, check, fix, run, guard, wrap, unwrap, scan, discover, pin, diff, lock, dashboard, watch, version, update-registry, merge, verify, sast, sbom, push-nucleus, shadow, killchain, snapshot, register, advise, baseline (5 sub-commands: save, list, compare, delete, export), rule (3 sub-commands: validate, test, list), policy (3 sub-commands: validate, init, check), extensions (2 sub-commands: discover, scan), agent-files (2 sub-commands: discover, scan), plugins (2 sub-commands: discover, scan), feed (1 sub-command: verify) — verify with `credenzo --help` before each release
 - 56-entry curated dataset of legitimate MCP servers (`registry/known-servers.json`, `docs/registry.md`)
 - 42 community rules ship bundled; the breakdown is under "Data files at project root" above

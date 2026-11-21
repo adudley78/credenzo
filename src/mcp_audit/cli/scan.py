@@ -2273,8 +2273,11 @@ def scan(
         _write_vex(result, vex, con, registry, offline_registry)
 
     result = _apply_severity_threshold(result, severity_threshold, con)
-    if result.exploit_data and not any(f.cve for f in result.findings):
-        result.exploit_data = None  # no CVE finding left to date
+    if result.exploit_data:
+        from mcp_audit.exploit.signals import own_cves  # noqa: PLC0415
+
+        if not any(own_cves(f) for f in result.findings):
+            result.exploit_data = None  # no CVE finding left to date
     result = _apply_advisory_feed(result, advisory_feed, con)
 
     # Suppress score for formatters when --no-score is requested.  The scanner

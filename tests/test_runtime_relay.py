@@ -485,3 +485,58 @@ class TestEnforceForwardsOnlyWhatItRead:
         err = capfd.readouterr().err
         assert err.count("was not forwarded") == 1
         assert ("from the server" if to_client else "from the client") in err
+
+
+class TestLineSplitting:
+    """`_take_lines`: the one line splitter both pumps use."""
+
+    def test_lines_come_back_without_newline_and_the_rest_stays(self) -> None:
+        from mcp_audit.runtime.relay import _take_lines
+
+        pending = bytearray(b"par")
+        assert _take_lines(pending, b"t one\ntwo\nthr") == [b"part one", b"two"]
+        assert pending == bytearray(b"thr")
+
+    def test_a_chunk_with_no_newline_is_only_appended(self) -> None:
+        from mcp_audit.runtime.relay import _take_lines
+
+        pending = bytearray()
+        for _ in range(3):
+            assert _take_lines(pending, b"abc") == []
+        assert _take_lines(pending, b"\n") == [b"abcabcabc"]
+        assert pending == bytearray()
+
+    def test_a_long_line_reaches_the_other_side_whole(self) -> None:
+        """A 16 MiB line in 64 KiB reads (once quadratic: 1 s here, 18 s at 64 MiB)."""
+        from mcp_audit.runtime import relay as relay_mod
+
+        line = b"x" * (16 * 1024 * 1024) + b"\n"
+        src_r, src_w = os.pipe()
+        dst_r, dst_w = os.pipe()
+        received = bytearray()
+
+        def _write() -> None:
+            relay_mod._write_all(src_w, line + b"tail")
+            os.close(src_w)
+
+        def _read() -> None:
+            while chunk := os.read(dst_r, 1 << 20):
+                received.extend(chunk)
+
+        writer = threading.Thread(target=_write, daemon=True)
+        reader = threading.Thread(target=_read, daemon=True)
+        writer.start()
+        reader.start()
+        relay_mod._line_pump(
+            src_r,
+            dst_w,
+            lambda: None,
+            handle=lambda b: (b, None),
+            out_lock=threading.Lock(),
+        )
+        os.close(dst_w)
+        reader.join(timeout=30)
+        writer.join(timeout=30)
+        os.close(src_r)
+        os.close(dst_r)
+        assert bytes(received) == line + b"tail"

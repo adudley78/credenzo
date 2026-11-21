@@ -1,9 +1,11 @@
 """Tests for the push-nucleus CLI command.
 
-Covers: CLI registration, Enterprise gate, API key resolution, successful push,
-job ERROR handling, poll timeout, --output-file, and severity threshold filtering.
+Covers: CLI registration, API key resolution, successful push, job ERROR
+handling, poll timeout, --output-file, severity threshold filtering, and TLS
+(certificate checked by default, --ca-bundle, --insecure, redirects refused).
 
-All HTTP calls are mocked — no real network requests are made.
+No request leaves the machine: Nucleus calls are mocked, and the redirect test
+uses two servers on 127.0.0.1.
 """
 
 from __future__ import annotations
@@ -410,3 +412,129 @@ def test_push_nucleus_api_key_from_env_var() -> None:
         result = runner.invoke(app, args_no_key)
 
     assert result.exit_code == 0
+
+
+# ── TLS and redirects ─────────────────────────────────────────────────────────
+
+
+def _push(extra: list[str]) -> tuple[object, list[object]]:
+    """Run push-nucleus with *extra* flags; return the result and the TLS contexts."""
+    contexts: list[object] = []
+
+    def _upload(*args: object, **_kw: object) -> dict:
+        contexts.append(args[4])
+        return {"job_id": 1}
+
+    with (
+        patch("mcp_audit.cli.run_scan", return_value=_make_result()),
+        patch(
+            "mcp_audit.cli.push_nucleus.format_nucleus",
+            return_value=_fake_nucleus_json(),
+        ),
+        patch("mcp_audit.cli.push_nucleus._upload_scan", side_effect=_upload),
+        patch("mcp_audit.cli.push_nucleus._poll_job", return_value={"status": "DONE"}),
+    ):
+        result = runner.invoke(app, [*_BASE_ARGS, *extra])
+    return result, contexts
+
+
+def test_tls_certificate_and_host_name_are_checked_by_default() -> None:
+    """The API key never goes over a connection whose certificate is unchecked."""
+    import ssl
+
+    result, contexts = _push([])
+    assert result.exit_code == 0
+    (ctx,) = contexts
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
+    assert "--insecure" not in result.output
+
+
+def test_insecure_turns_the_checks_off_and_says_so() -> None:
+    import ssl
+
+    result, contexts = _push(["--insecure"])
+    assert result.exit_code == 0
+    (ctx,) = contexts
+    assert ctx.verify_mode == ssl.CERT_NONE
+    assert ctx.check_hostname is False
+    assert "certificate is not checked" in unwrapped(result.output)
+
+
+def test_missing_ca_bundle_exits_2(tmp_path: Path) -> None:
+    result, contexts = _push(["--ca-bundle", str(tmp_path / "missing.pem")])
+    assert result.exit_code == 2
+    assert "CA bundle not found" in unwrapped(result.output)
+    assert contexts == []
+
+
+def test_unreadable_ca_bundle_exits_2(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.pem"
+    bad.write_text("not a certificate", encoding="utf-8")
+    result, contexts = _push(["--ca-bundle", str(bad)])
+    assert result.exit_code == 2
+    assert "Could not load the CA bundle" in unwrapped(result.output)
+    assert contexts == []
+
+
+def test_ca_bundle_and_insecure_together_exit_2(tmp_path: Path) -> None:
+    pem = tmp_path / "ca.pem"
+    pem.write_text("x", encoding="utf-8")
+    result, contexts = _push(["--ca-bundle", str(pem), "--insecure"])
+    assert result.exit_code == 2
+    assert "not both" in unwrapped(result.output)
+    assert contexts == []
+
+
+def test_a_redirect_is_refused_and_the_key_stays_on_the_first_host() -> None:
+    """urllib copies x-apikey to a redirect target; _open must not follow one."""
+    import http.server
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from mcp_audit.cli.push_nucleus import _build_ssl_ctx, _open
+
+    seen: list[str | None] = []
+
+    class _Sink(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen.append(self.headers.get("x-apikey"))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def log_message(self, *_a: object) -> None:
+            pass
+
+    sink = http.server.HTTPServer(("127.0.0.1", 0), _Sink)
+    target = f"http://127.0.0.1:{sink.server_address[1]}/"
+
+    class _Redirect(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.end_headers()
+
+        def log_message(self, *_a: object) -> None:
+            pass
+
+    origin = http.server.HTTPServer(("127.0.0.1", 0), _Redirect)
+    for server in (sink, origin):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        req = urllib.request.Request(  # noqa: S310 — local test server
+            f"http://127.0.0.1:{origin.server_address[1]}/jobs/1",
+            headers={"x-apikey": "secret"},
+        )
+        try:
+            _open(req, _build_ssl_ctx())
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 302
+        else:  # pragma: no cover - the assertion below explains the failure
+            raise AssertionError("the redirect was followed")
+        assert seen == []
+    finally:
+        for server in (sink, origin):
+            server.shutdown()
+            server.server_close()

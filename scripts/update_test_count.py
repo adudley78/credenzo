@@ -163,6 +163,21 @@ _SUBSTITUTIONS: list[tuple[str, str, str]] = [
         " {real_community_count} real detection rules"
         " (`COMM-001` through `COMM-{community_max_id:03d}`;",
     ),
+    # --- real and enabled community rule counts (README.md, CLAUDE.md) ---
+    (
+        "README.md",
+        r"\(\d+ real rules \+ a contribution template\), available to every user"
+        r" with no gating — \d+ run by default and \d+ \(`STDIO-001`\)",
+        "({real_community_count} real rules + a contribution template), available"
+        " to every user with no gating — {enabled_community_count} run by default"
+        " and {disabled_community_count} (`STDIO-001`)",
+    ),
+    (
+        "CLAUDE.md",
+        r"\d+ of the \d+ real rules run by default",
+        "{enabled_community_count} of the {real_community_count} real rules"
+        " run by default",
+    ),
     # --- registry entry count — "curated dataset of N known-legitimate MCP
     # servers" prose form (CLAUDE.md) ---
     (
@@ -339,6 +354,25 @@ def _collect_real_community_rule_count(community_dir: Path | None = None) -> int
     return sum(1 for p in community_dir.glob("*.yml") if p.name != "TEMPLATE.yml")
 
 
+def _collect_enabled_community_rule_count(community_dir: Path | None = None) -> int:
+    """Return how many real community rules run by default (``enabled`` not false).
+
+    README.md and CLAUDE.md once said "39 real rules ... 38 run by default"
+    while the directory held 41 real rules, 40 of them enabled: nothing
+    derived those two numbers.
+    """
+    if community_dir is None:
+        community_dir = ROOT / "rules" / "community"
+    count = 0
+    for path in community_dir.glob("*.yml"):
+        if path.name == "TEMPLATE.yml":
+            continue
+        rule = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if rule.get("enabled", True) is not False:
+            count += 1
+    return count
+
+
 def _collect_registry_entry_count(registry_path: Path | None = None) -> int:
     """Return the ``entry_count`` field from ``registry/known-servers.json``.
 
@@ -415,6 +449,7 @@ def _apply(*, check_only: bool) -> int:
     community_count = _collect_community_rule_count()
     community_max_id = _collect_community_max_id()
     real_community_count = _collect_real_community_rule_count()
+    enabled_community_count = _collect_enabled_community_rule_count()
     registry_count = _collect_registry_entry_count()
     analyzer_count = _collect_analyzer_count()
     release_version = _collect_release_version()
@@ -439,6 +474,8 @@ def _apply(*, check_only: bool) -> int:
         "community_count": community_count,
         "community_max_id": community_max_id,
         "real_community_count": real_community_count,
+        "enabled_community_count": enabled_community_count,
+        "disabled_community_count": real_community_count - enabled_community_count,
         "registry_count": registry_count,
         "analyzer_count": analyzer_count,
         "release_tag": release_tag,
