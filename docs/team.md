@@ -26,7 +26,9 @@ prints one notice in a run where it held an alert back.
 ## Subscribe
 
 <!-- team-checkout:start -->
-Subscriptions are not open yet. Until they open, the action sends alerts for every repository.
+**[Subscribe to Credenzo Team](https://buy.stripe.com/4gM4gzdLIgRN9p3ePudwc08)**: $99 a month for up to 10 seats.
+
+[Change the card, get an invoice or cancel](https://billing.stripe.com/p/login/fZueVdbDA595eJnbDidwc00).
 <!-- team-checkout:end -->
 
 At checkout, type the name of your GitHub organization (the `acme` in
