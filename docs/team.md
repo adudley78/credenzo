@@ -32,8 +32,8 @@ prints one notice in a run where it held an alert back.
 <!-- team-checkout:end -->
 
 At checkout, type the name of your GitHub organization (the `acme` in
-`github.com/acme`). You can give up to three names. Alerts start within the
-hour. You get no licence key and you add no secret for the licence.
+`github.com/acme`). You can give up to three names. Alerts start within 12
+hours. You get no licence key and you add no secret for the licence.
 
 To move a subscription to a different organization, cancel it and subscribe
 again.
@@ -180,8 +180,11 @@ Nothing is sent to the Credenzo project. The action does not report use.
 
 ## How a subscription is found
 
-Twice an hour a workflow in this repository reads the subscriptions from
-Stripe and publishes the licence list
+A workflow in this repository reads the subscriptions from Stripe and
+publishes the licence list. It is scheduled twice an hour, but GitHub does not
+start each scheduled run: on 2026-11-20 and 2026-11-21 the gap between two
+runs was up to 8 hours. So a new subscription can take up to 12 hours to reach
+the list
 ([`team-licenses.yml`](../.github/workflows/team-licenses.yml),
 [`scripts/team_licenses.py`](../scripts/team_licenses.py)). The action
 computes the SHA-256 of `credenzo-team:` plus your owner name in lower case,
