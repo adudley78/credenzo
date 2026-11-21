@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- **Credenzo Team subscriptions are open from 2026-11-21.** `docs/team.md` shows the Subscribe link and the link to change a card, get an invoice or cancel. `team/offer.json` holds the date. A new subscription reaches the licence list within 12 hours, not within the hour: GitHub does not start each scheduled run of the list workflow. No command and no check changed.
 - **Example workflows use the 0.36.1 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.0 to v0.36.1. The Team example now runs the action that prints the drift text in the run log.
 
 ## [0.36.1] - 2026-11-20
