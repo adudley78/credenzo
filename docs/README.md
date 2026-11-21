@@ -79,6 +79,7 @@ Every file in this folder is listed once. `tests/test_docs_index.py` fails when 
 
 | File | What it covers |
 |---|---|
+| [module-map.md](module-map.md) | One entry per module: finding IDs, pipeline step, budgets, tests |
 | [writing-rules.md](writing-rules.md) · [community-rule-spec.md](community-rule-spec.md) | Policy rule format and its specification |
 | [contributing-rules.md](contributing-rules.md) · [contributing-sast-rules.md](contributing-sast-rules.md) | How to contribute rules |
 | [contributors.md](contributors.md) | Contributor credits |

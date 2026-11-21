@@ -49,11 +49,17 @@ assigned, and tracked per-endpoint.
 
 Choose one installation method per your environment.
 
-### Option A — Binary download (when available)
+### Option A — Binary download
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/adudley78/credenzo/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/adudley78/credenzo/main/scripts/install.sh | sh
 ```
+
+The script installs the latest release (or `CREDENZO_VERSION`) to `/usr/local/bin`
+(or `CREDENZO_INSTALL_DIR`). It checks the binary's build provenance with
+`gh attestation verify` first, and installs nothing when the check fails or `gh` is
+missing (`CREDENZO_SKIP_VERIFY=1` installs without it). Releases up to v0.29.0 carry
+no attestation.
 
 ### Option D — Standalone binary (no Python required)
 
@@ -61,19 +67,22 @@ Download the pre-built binary for your platform from the GitHub Releases page:
 
 ```bash
 # macOS (Apple Silicon)
-curl -sSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-darwin-arm64 \
+curl -fsSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-darwin-arm64 \
   -o /usr/local/bin/mcp-audit && chmod +x /usr/local/bin/mcp-audit
 
 # macOS (Intel)
-curl -sSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-darwin-x86_64 \
+curl -fsSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-darwin-x86_64 \
   -o /usr/local/bin/mcp-audit && chmod +x /usr/local/bin/mcp-audit
 
 # Linux (x86_64)
-curl -sSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-linux-x86_64 \
+curl -fsSL https://github.com/adudley78/credenzo/releases/latest/download/mcp-audit-linux-x86_64 \
   -o /usr/local/bin/mcp-audit && chmod +x /usr/local/bin/mcp-audit
 ```
 
 No Python installation required. The binary bundles the Python runtime and all dependencies.
+
+Before you run a downloaded binary, check that the release workflow built it:
+`gh attestation verify /usr/local/bin/mcp-audit --repo adudley78/credenzo`.
 
 ### Option B — Python package (PyPI)
 

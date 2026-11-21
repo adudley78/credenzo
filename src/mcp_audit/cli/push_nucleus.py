@@ -40,18 +40,53 @@ _POLL_INTERVAL_SECONDS = 3
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"DONE", "ERROR", "DESCHEDULED"})
 
 
-def _build_ssl_ctx() -> ssl.SSLContext:
-    """Create a permissive SSL context for dev/staging Nucleus environments.
+def _build_ssl_ctx(
+    ca_bundle: Path | None = None, *, insecure: bool = False
+) -> ssl.SSLContext:
+    """Return the TLS context for the Nucleus API.
 
-    Skips hostname and certificate verification. This is intentional for
-    enterprise dev environments that may use self-signed certificates — do NOT
-    use in production without explicit acknowledgment of the TLS risk.
+    The certificate and the host name are checked by default. *ca_bundle*
+    adds a CA file for an instance that uses a private CA. *insecure* turns
+    both checks off: anyone on the network path can then read the API key,
+    so it is only for a test instance, and the command prints a warning.
     """
-    # Dev-only: permissive SSL mirrors scripts/validate_nucleus.py approach.
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+    if insecure:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    return ssl.create_default_context(cafile=str(ca_bundle) if ca_bundle else None)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect, so the API key goes to the ``--url`` host only.
+
+    ``urllib`` copies request headers (``x-apikey`` too) to a redirect target,
+    on any host and over plain ``http://``.
+    """
+
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
+def _open(req: urllib.request.Request, ssl_ctx: ssl.SSLContext) -> bytes:
+    """Send *req* with *ssl_ctx*, refuse redirects, and return the body."""
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=ssl_ctx), _NoRedirect
+    )
+    with opener.open(req, timeout=30) as resp:
+        return resp.read()
+
+
+def _network_error(con: Console, prefix: str, exc: urllib.error.URLError) -> None:
+    """Print a network error, with the fix for a certificate that did not verify."""
+    con.print(f"[red]{prefix}: {exc.reason}[/red]")
+    if isinstance(exc.reason, ssl.SSLCertVerificationError):
+        con.print(
+            "[yellow]The server certificate did not verify. If the instance "
+            "uses a private CA, pass --ca-bundle PATH. On macOS with the "
+            "python.org Python, run 'Install Certificates.command' once.[/yellow]"
+        )
 
 
 def _upload_scan(
@@ -72,7 +107,7 @@ def _upload_scan(
         project_id: Nucleus project ID to upload into.
         api_key: Nucleus API key sent as the ``x-apikey`` header.
         payload_json: Serialised FlexConnect JSON string.
-        ssl_ctx: SSL context; permissive for dev environments.
+        ssl_ctx: TLS context from :func:`_build_ssl_ctx`.
         con: Rich console for error output.
 
     Returns:
@@ -108,18 +143,21 @@ def _upload_scan(
         },
     )
     try:
-        with urllib.request.urlopen(  # noqa: S310  # nosec B310 — same URL validated above
-            req, timeout=30, context=ssl_ctx
-        ) as resp:
-            return json.loads(resp.read().decode())
+        return json.loads(_open(req, ssl_ctx).decode())
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode(errors="replace")
         con.print(f"[red]HTTP {exc.code} {exc.reason}[/red]")
         con.print(f"[red]  URL: {url}[/red]")
-        con.print(f"[red]  Response body: {body_text[:500]}[/red]")
+        if 300 <= exc.code < 400:
+            con.print(
+                "[red]  The server redirected. The API key is sent to --url "
+                "only: pass the final URL.[/red]"
+            )
+        else:
+            con.print(f"[red]  Response body: {body_text[:500]}[/red]")
         raise typer.Exit(2) from None
     except urllib.error.URLError as exc:
-        con.print(f"[red]Network error uploading to Nucleus: {exc.reason}[/red]")
+        _network_error(con, "Network error uploading to Nucleus", exc)
         raise typer.Exit(2) from None
 
 
@@ -142,7 +180,7 @@ def _poll_job(
         project_id: Nucleus project ID.
         job_id: Job ID returned by the upload endpoint.
         api_key: Nucleus API key sent as the ``x-apikey`` header.
-        ssl_ctx: SSL context; permissive for dev environments.
+        ssl_ctx: TLS context from :func:`_build_ssl_ctx`.
         timeout: Maximum seconds to wait before giving up.
         con: Rich console for progress output.
 
@@ -166,16 +204,13 @@ def _poll_job(
             url, method="GET", headers=req_headers
         )
         try:
-            with urllib.request.urlopen(  # noqa: S310  # nosec B310 — same URL
-                req, timeout=30, context=ssl_ctx
-            ) as resp:
-                job = json.loads(resp.read().decode())
+            job = json.loads(_open(req, ssl_ctx).decode())
         except urllib.error.HTTPError as exc:
             body_text = exc.read().decode(errors="replace")
             con.print(f"[red]Poll HTTP {exc.code}: {body_text[:200]}[/red]")
             raise typer.Exit(2) from None
         except urllib.error.URLError as exc:
-            con.print(f"[red]Poll network error: {exc.reason}[/red]")
+            _network_error(con, "Poll network error", exc)
             raise typer.Exit(2) from None
 
         # The API may return a list or a dict depending on version — handle both.
@@ -254,6 +289,19 @@ def push_nucleus(
             "(parent dirs created automatically)."
         ),
     ),
+    ca_bundle: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--ca-bundle",
+        help="CA certificate file (PEM) for an instance that uses a private CA.",
+    ),
+    insecure: bool = typer.Option(  # noqa: B008
+        False,
+        "--insecure",
+        help=(
+            "Do not check the server certificate. Anyone on the network path "
+            "can then read the API key. For a test instance only."
+        ),
+    ),
 ) -> None:
     """Run a scan and push results to Nucleus Security via FlexConnect API.
 
@@ -290,6 +338,25 @@ def push_nucleus(
         raise typer.Exit(2)
     base_api_url = f"{url}/nucleus/api"
 
+    if insecure and ca_bundle is not None:
+        console.print("[red]Error:[/red] Use --ca-bundle or --insecure, not both.")
+        raise typer.Exit(2)
+    if ca_bundle is not None:
+        ca_bundle = ca_bundle.expanduser().resolve()
+        if not ca_bundle.is_file():
+            console.print(f"[red]Error:[/red] CA bundle not found: {ca_bundle}")
+            raise typer.Exit(2)
+    try:
+        ssl_ctx = _build_ssl_ctx(ca_bundle, insecure=insecure)
+    except (OSError, ssl.SSLError) as exc:
+        console.print(f"[red]Error:[/red] Could not load the CA bundle: {exc}")
+        raise typer.Exit(2) from None
+    if insecure:
+        console.print(
+            "[yellow]Warning: --insecure: the server certificate is not "
+            "checked. Anyone on the network path can read the API key.[/yellow]"
+        )
+
     # Validate all user-supplied config paths before running the scan.
     extra_paths: list[Path] | None = None
     if config_paths:
@@ -310,8 +377,6 @@ def push_nucleus(
     if output_file is not None:
         _write_output(output_file, nucleus_json)
         console.print(f"[dim]FlexConnect JSON written to {output_file}[/dim]")
-
-    ssl_ctx = _build_ssl_ctx()
 
     console.print(
         f"[dim]Uploading to {base_api_url}/projects/{project_id}/scans …[/dim]"

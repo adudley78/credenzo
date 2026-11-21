@@ -1753,3 +1753,90 @@ class TestHarnessPosture:
         found = [c for c in discover_configs() if c.path == user]
         assert len(found) == 1
         assert found[0].client_name == "claude-code"
+
+
+# ---------------------------------------------------------------------------
+# CFHYG-002 — sticky world-writable ancestors (/tmp)
+# ---------------------------------------------------------------------------
+
+
+def _sticky_tree(tmp_path: Path) -> tuple[Path, Path]:
+    """Return ``(sticky dir, config)`` for ``<sticky 1777>/<private 700>/mcp.json``."""
+    sticky = tmp_path / "sticky"
+    private = sticky / "private"
+    private.mkdir(parents=True)
+    sticky.chmod(0o1777)
+    private.chmod(0o700)
+    cfg = private / "mcp.json"
+    cfg.write_text("{}")
+    cfg.chmod(0o600)
+    return sticky, cfg
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions only")
+def test_cfhyg002_a_private_folder_under_a_sticky_dir_is_safe(tmp_path: Path) -> None:
+    """``mktemp -d`` under /tmp: no other user can rename the private folder."""
+    _, cfg = _sticky_tree(tmp_path)
+    with patch(
+        "mcp_audit.analyzers.config_hygiene.Path.home",
+        return_value=tmp_path / "not-an-ancestor",
+    ):
+        findings = ConfigHygieneAnalyzer().analyze(_make_server(cfg))
+    assert "CFHYG-002" not in _finding_ids(findings)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions only")
+def test_cfhyg002_a_sticky_parent_of_the_file_itself_still_fires(
+    tmp_path: Path,
+) -> None:
+    """A config directly in /tmp could have been planted before it was written."""
+    sticky, _ = _sticky_tree(tmp_path)
+    cfg = sticky / "mcp.json"
+    cfg.write_text("{}")
+    cfg.chmod(0o600)
+    with patch("mcp_audit.analyzers.config_hygiene.Path.home", return_value=tmp_path):
+        findings = ConfigHygieneAnalyzer().analyze(_make_server(cfg))
+    assert "CFHYG-002" in _finding_ids(findings)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions only")
+def test_cfhyg002_a_folder_another_user_owns_under_a_sticky_dir_fires(
+    tmp_path: Path,
+) -> None:
+    """The owner of the folder below /tmp can replace it: that is not the user."""
+    import os
+
+    _, cfg = _sticky_tree(tmp_path)
+    home = patch(
+        "mcp_audit.analyzers.config_hygiene.Path.home",
+        return_value=tmp_path / "not-an-ancestor",
+    )
+    if os.geteuid() == 0:
+        os.chown(cfg.parent, 65534, 65534)
+        with home:
+            findings = ConfigHygieneAnalyzer().analyze(_make_server(cfg))
+    else:
+        with (
+            home,
+            patch(
+                "mcp_audit.analyzers.config_hygiene.os.getuid",
+                return_value=os.getuid() + 1,
+            ),
+        ):
+            findings = ConfigHygieneAnalyzer().analyze(_make_server(cfg))
+    assert "CFHYG-002" in _finding_ids(findings)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions only")
+def test_cfhyg002_a_non_sticky_world_writable_ancestor_still_fires(
+    tmp_path: Path,
+) -> None:
+    """Without the sticky bit anyone can rename the folder below it."""
+    sticky, cfg = _sticky_tree(tmp_path)
+    sticky.chmod(0o777)
+    with patch(
+        "mcp_audit.analyzers.config_hygiene.Path.home",
+        return_value=tmp_path / "not-an-ancestor",
+    ):
+        findings = ConfigHygieneAnalyzer().analyze(_make_server(cfg))
+    assert "CFHYG-002" in _finding_ids(findings)

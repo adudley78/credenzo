@@ -267,6 +267,24 @@ def _parse_dotenv(text: str) -> dict[str, str]:
     return env
 
 
+def _sticky_guards(dir_stat: os.stat_result, child: Path) -> bool:
+    """Whether a sticky, world-writable directory still protects *child*.
+
+    In a directory with the sticky bit (``/tmp``), only the owner of an entry
+    (or root) can rename or delete it. So a folder that the user or root owns
+    below ``/tmp`` cannot be replaced by another user, and CFHYG-002 does not
+    apply to ``/tmp`` itself: ``mktemp -d`` and a clone into a temporary
+    folder make exactly this path.
+    """
+    if not dir_stat.st_mode & stat_module.S_ISVTX or not hasattr(os, "getuid"):
+        return False
+    try:
+        owner = child.lstat().st_uid
+    except OSError:
+        return False
+    return owner in (os.getuid(), 0)
+
+
 def _short_path(path: Path) -> str:
     """``.gemini/settings.json``-style name: the parent directory plus the name."""
     return f"{path.parent.name}/{path.name}" if path.parent.name else path.name
@@ -823,7 +841,9 @@ class ConfigHygieneAnalyzer(BaseAnalyzer):
     Checks performed per server (via its ``config_path``):
 
     - **CFHYG-001**: config file is world-readable (POSIX o+r).
-    - **CFHYG-002**: any ancestor directory up to ``$HOME`` is world-writable.
+    - **CFHYG-002**: any ancestor directory up to ``$HOME`` is world-writable
+      (a sticky one such as ``/tmp`` counts only as the file's own parent,
+      or above a folder that another user owns).
     - **CFHYG-003**: config file stores a plaintext secret inline.
     - **CFHYG-004**: config file uses env-var references for all credentials
       (positive signal — reinforces correct behaviour).
@@ -935,20 +955,28 @@ class ConfigHygieneAnalyzer(BaseAnalyzer):
         server: ServerConfig,
         config_path: Path,
     ) -> list[Finding]:
-        """CFHYG-002 — any ancestor directory up to $HOME is world-writable."""
+        """CFHYG-002 — any ancestor directory up to $HOME is world-writable.
+
+        A sticky ancestor (``/tmp``) above the file's own parent is skipped
+        when the next folder down belongs to the user or root: see
+        :func:`_sticky_guards`.
+        """
         try:
             home = Path.home()
         except RuntimeError:
             home = None
 
         candidate = config_path.parent
+        child = config_path
         while True:
             try:
                 dir_stat = candidate.stat()
             except (PermissionError, OSError):
                 break
 
-            if dir_stat.st_mode & stat_module.S_IWOTH:
+            if dir_stat.st_mode & stat_module.S_IWOTH and not (
+                child != config_path and _sticky_guards(dir_stat, child)
+            ):
                 return [
                     Finding(
                         id="CFHYG-002",
@@ -983,7 +1011,7 @@ class ConfigHygieneAnalyzer(BaseAnalyzer):
             if parent == candidate:
                 # Filesystem root — stop.
                 break
-            candidate = parent
+            child, candidate = candidate, parent
 
         return []
 

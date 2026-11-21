@@ -49,6 +49,13 @@ credenzo push-nucleus [OPTIONS]
 | `--severity-threshold` | level | `INFO` (all) | Filter findings before pushing. `HIGH` pushes only HIGH and CRITICAL. |
 | `--timeout` | int | 120 s | Maximum seconds to poll the import job before giving up (exit 2). |
 | `--output-file` | path | — | Also write the FlexConnect JSON to disk — useful for debugging or audit trails. |
+| `--ca-bundle` | path | system CAs | CA certificate file (PEM) for an instance that uses a private CA. |
+| `--insecure` | flag | off | Do not check the server certificate. Anyone on the network path can then read the API key. For a test instance only; the command prints a warning. |
+
+The command checks the server certificate and host name, and it does not
+follow a redirect: the API key goes to the `--url` host only. If the
+certificate does not verify, pass `--ca-bundle` for a private CA. On macOS with
+the python.org Python, run `Install Certificates.command` once.
 
 ---
 

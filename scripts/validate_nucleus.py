@@ -26,11 +26,14 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-# Dev-only: skip SSL verification (avoids macOS Python CA bundle issue).
-# This script never ships in the package — safe for local validation use.
+# The certificate is checked: the API key goes over this connection. For a
+# test instance with a self-signed certificate, set NUCLEUS_INSECURE=1. On
+# macOS with the python.org Python, run 'Install Certificates.command' once.
 _SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
+if os.environ.get("NUCLEUS_INSECURE") == "1":
+    print("WARNING: NUCLEUS_INSECURE=1: certificate not checked.", file=sys.stderr)
+    _SSL_CTX.check_hostname = False
+    _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 # ── Configuration ────────────────────────────────────────────────────────────
 # All connection details come from environment variables so no specific

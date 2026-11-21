@@ -62,6 +62,21 @@ def _write_all(fd: int, data: bytes) -> None:
 MAX_LINE = 64 * 1024 * 1024
 
 
+def _take_lines(pending: bytearray, chunk: bytes) -> list[bytes]:
+    """Add *chunk* to *pending*, then remove and return its complete lines.
+
+    The lines come back without their newline; *pending* keeps the bytes after
+    the last newline. A chunk with no newline is only appended, so a long line
+    costs time in proportion to its length, not to its length squared.
+    """
+    pending += chunk
+    if b"\n" not in chunk:
+        return []
+    *lines, rest = pending.split(b"\n")
+    pending[:] = rest
+    return [bytes(line) for line in lines]
+
+
 def _pump(
     src_fd: int,
     dst_fd: int,
@@ -81,17 +96,14 @@ def _pump(
     before that record exists would have its listing passed unchecked.
     *on_done* runs exactly once when copying stops, for any reason.
     """
-    pending = b""
+    pending = bytearray()
 
     def _show(chunk: bytes) -> None:
-        nonlocal pending
-        pending += chunk
-        *lines, pending = pending.split(b"\n")
-        for line in lines:
+        for line in _take_lines(pending, chunk):
             with contextlib.suppress(Exception):
                 tap(line + b"\n")  # type: ignore[misc]
         if len(pending) > MAX_LINE:
-            pending = b""
+            pending.clear()
 
     try:
         while True:
@@ -162,7 +174,7 @@ def _line_pump(
         if reply is not None and reply_fd is not None:
             _client_write(reply)
 
-    pending = b""
+    pending = bytearray()
     skipping = False  # inside a line that passed MAX_LINE: drop up to its newline
     dropped = False
     failed = False
@@ -179,10 +191,8 @@ def _line_pump(
                 if not newline:
                     continue
                 skipping = False
-            pending += chunk
-            *lines, pending = pending.split(b"\n")
             try:
-                for line in lines:
+                for line in _take_lines(pending, chunk):
                     _handled(line + b"\n")
                 if len(pending) > MAX_LINE:
                     # A line that is too long to read is not forwarded, in
@@ -196,14 +206,14 @@ def _line_pump(
                         )
                     dropped = True
                     skipping = True
-                    pending = b""
+                    pending.clear()
             except OSError:
                 break
         if pending:
             # The last bytes had no newline. They are handled like a line,
             # so they are checked too, in either direction.
             with contextlib.suppress(OSError):
-                _handled(pending)
+                _handled(bytes(pending))
     finally:
         on_done()
 

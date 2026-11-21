@@ -266,9 +266,10 @@ def format_sarif(
     the first occurrence creates a rule entry; subsequent findings reference it
     by ``ruleIndex``.
 
-    Machine identity is recorded in ``runs[0].invocations[0]`` using the SARIF
-    ``machine``, ``account``, and ``operatingSystem`` properties.  *asset_prefix*
-    overrides the ``machine`` property when supplied (mirrors Nucleus behaviour).
+    Machine identity is recorded in ``runs[0].invocations[0]`` using the
+    ``machine`` and ``operatingSystem`` properties.  *asset_prefix* overrides
+    the ``machine`` property when supplied (mirrors Nucleus behaviour).  The OS
+    user name is never written: SARIF leaves the machine (docs/privacy.md).
 
     Args:
         result: The completed scan result to format.
@@ -301,7 +302,6 @@ def format_sarif(
         "executionSuccessful": True,
         "properties": {
             "machine": effective_machine,
-            "account": result.machine.username,
             "operatingSystem": (
                 f"{result.machine.os} {result.machine.os_version}".strip()
             ),

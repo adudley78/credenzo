@@ -263,11 +263,16 @@ class TestSarifFormatter:
         props = doc["runs"][0]["invocations"][0]["properties"]
         assert props["machine"] == "sarif-host"
 
-    def test_account_in_invocation(self) -> None:
-        result = _make_result(machine=_make_machine(username="dave"))
+    def test_the_user_name_is_not_in_sarif(self) -> None:
+        """SARIF leaves the machine; docs/privacy.md says it holds no user name.
+
+        It held ``invocations[0].properties.account`` from 2026-04 to 0.36.1.
+        """
+        result = _make_result(machine=_make_machine(username="dave-unique-user"))
         doc = self._doc(result)
         props = doc["runs"][0]["invocations"][0]["properties"]
-        assert props["account"] == "dave"
+        assert "account" not in props
+        assert "dave-unique-user" not in json.dumps(doc)
 
     def test_operating_system_in_invocation(self) -> None:
         result = _make_result(machine=_make_machine(os="Darwin", os_version="24.0.0"))
