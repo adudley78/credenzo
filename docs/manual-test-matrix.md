@@ -4,9 +4,11 @@
 > (0.36.1) plus the fixes of the 2026-11-21 audit.** Each section ran in its own
 > copy of the repository with an empty `HOME`, `$SCRATCH` and the dev build first
 > on `PATH` (`scripts/dev_build_guard.py` passed), on Linux with Python 3.12,
-> `uv sync --all-extras`, semgrep and minisign 0.12; no cosign. Sections that need a
-> live service ran against it (feed, registries, deps.dev); `push-nucleus` was
-> checked against an unreachable URL only, as Section 45 says. Update this line
+> `uv sync --all-extras`, semgrep and minisign 0.12; no cosign. Sections 51, 65 and
+> 66 ran in one shell with the section whose files they use; Section 59 ran in a
+> venv with no extras. Sections that need a live service ran against it (feed,
+> registries, deps.dev); `push-nucleus` was checked against an unreachable URL
+> only, as Section 45 says. All sections gave their expected result. Update this line
 > after every release that touches config parsing, analyzers, or CLI surface: a
 > matrix with no such line cannot be known to be stale.
 >
@@ -1940,14 +1942,12 @@ credenzo scan --path demo/configs --connect 2>&1 | grep -m1 "MCP SDK not install
 ```
 
 **Expected:** each message names a **complete, copy-pasteable** install
-command that includes the extra in brackets and the real distribution name:
-`pip install 'mcp-audit-scanner[sbom]'`,
-`pip install 'mcp-audit-scanner[attestation]'`,
-`pip install 'mcp-audit-scanner[mcp]'`.
-
-**Fixed in v0.18.2 (R60-04 / R60-05):** hints use `rich.markup.escape` /
-`markup=False` so `[sbom]` / `[mcp]` / `[attestation]` survive, and they
-name `mcp-audit-scanner`.
+command with the extra in brackets: `pip install 'credenzo[sbom]'`,
+`pip install 'credenzo[attestation]'`, `pip install 'credenzo[mcp]'` (the
+`credenzo` distribution forwards each extra to `mcp-audit-scanner`; before
+0.33.0 the hints named `mcp-audit-scanner`). The brackets must survive Rich
+markup (R60-04 / R60-05). With all extras installed the first two commands
+succeed and print no hint: use a fresh venv with `pip install -e .`.
 
 ---
 
