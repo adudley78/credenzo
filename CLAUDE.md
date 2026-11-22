@@ -605,6 +605,7 @@ first time, or after a fresh clone. A plain `uv sync` omits `pytest-asyncio`
 and other dev tools — async tests will silently fail with unknown-mark warnings
 if this step is skipped.
 
+- Before each commit, run the `verify` skill (`.claude/skills/verify/SKILL.md`): lint, the tests for the changed code, then the demo scan against `tests/golden/demo_scan_findings.json` and the `run` demo. Its rules: stop after three failed fix rounds; never skip a flaky test or edit a golden file to make a change pass
 - Run `uv run pytest` after every change
 - Run `uv run ruff check src/ tests/` before committing
 - Run `uv run bandit -r src/ -ll -f txt` periodically (we're a security tool — act like it)
@@ -634,11 +635,11 @@ What each feature does is in `README.md`, `docs/README.md` (the index of every d
 Counts that `scripts/update_test_count.py` keeps in sync:
 
 - 8 analyzers: poisoning, credentials, transport, supply chain, rug-pull, toxic flow, config hygiene, auth
-- 11235 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
+- 11237 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
 - 35 top-level CLI commands: affected, vet, reach, check, fix, run, guard, wrap, unwrap, scan, discover, pin, diff, lock, dashboard, watch, version, update-registry, merge, verify, sast, sbom, push-nucleus, shadow, killchain, snapshot, register, advise, baseline (5 sub-commands: save, list, compare, delete, export), rule (3 sub-commands: validate, test, list), policy (3 sub-commands: validate, init, check), extensions (2 sub-commands: discover, scan), agent-files (2 sub-commands: discover, scan), plugins (2 sub-commands: discover, scan), feed (1 sub-command: verify) — verify with `credenzo --help` before each release
 - 56-entry curated dataset of legitimate MCP servers (`registry/known-servers.json`, `docs/registry.md`)
 - 42 community rules ship bundled; the breakdown is under "Data files at project root" above
-- Demo: 75 findings on a first scan of `demo/configs/` (67 once rug-pull state exists; 76 and 68 up to 0.33.0, before STORY-0171 moved the bare "do not mention" out of POISON-012; POISON-070 still reports that text). Recount before each release: `credenzo scan --path demo/configs/ --format json`
+- Demo: 75 findings on a first scan of `demo/configs/` (67 once rug-pull state exists; 76 and 68 up to 0.33.0, before STORY-0171 moved the bare "do not mention" out of POISON-012; POISON-070 still reports that text). Recount before each release: `credenzo scan --path demo/configs/ --format json`. `tests/test_demo_scan_golden.py` pins the first-scan findings without CFHYG-001/002 (67) in `tests/golden/demo_scan_findings.json`
 
 ## Provenance
 
