@@ -8,7 +8,7 @@ description: Use before each commit in this repository, and to confirm a fix. Li
 Run the steps in order. Stop at the first failure. All steps are offline.
 
 1. Lint: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/`
-2. The tests for the changed code. `docs/module-map.md` names the tests that pin each module. Run them and each changed test file with `uv run pytest <files> -q -rs`.
+2. The tests for the changed code: `tests/test_<module>.py` for each changed module, the tests that its `docs/module-map.md` entry names, and each changed test file. Run them with `uv run pytest <files> -q -rs`.
 3. End to end: `uv run pytest tests/test_demo_scan_golden.py tests/test_demo_run.py -q -rs`. The first scans `demo/configs/` and compares each finding with `tests/golden/demo_scan_findings.json`. The second runs `demo/run/run.sh` (needs the `mcp` extra).
 4. Before a pull request: the "Verify block" in `CONTRIBUTING.md`.
 

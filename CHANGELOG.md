@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`credenzo run` took time in proportion to the square of a long line.** Each read of 64 KiB scanned and copied the whole part of the line read so far. A 32 MiB `tools/list` answer on one line held the relay for 4.6 seconds; at the 64 MiB limit, about 18 seconds. Both modes now scan only the new bytes (32 MiB: 0.06 seconds). No byte that is forwarded changed.
 - **Binary build: a runner that cannot reach the package index for a minute no longer fails the build.** The build step waited 10 seconds for a connection to pypi.org and tried a request 3 more times, 54 seconds in all. On 2026-11-20 a macOS runner failed this way on `main`. The step now waits 30 seconds for a connection and tries a request 8 more times, and the step that downloads CPython has the same limits. The same steps build the release binaries.
 
-### Tests
+### Added
 
 - **An end-to-end check of the demo scan, and a `verify` skill for coding agents.** `tests/test_demo_scan_golden.py` runs `scan` on `demo/configs/` as a first scan and compares each finding (severity, ID, server, tool) with `tests/golden/demo_scan_findings.json` (grade F; the 67 findings that do not depend on file permissions, so the check also holds on Windows). Before this, only the count in CLAUDE.md recorded the demo result, and nothing checked it. `.claude/skills/verify/SKILL.md` tells an agent what to run before each commit: lint, the tests for the changed code, this check and the `run` demo. It also stops an agent after three failed fix rounds and forbids skipping a flaky test or editing a golden file to make a change pass. No command and no check changed.
 

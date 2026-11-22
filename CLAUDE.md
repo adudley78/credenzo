@@ -639,7 +639,7 @@ Counts that `scripts/update_test_count.py` keeps in sync:
 - 35 top-level CLI commands: affected, vet, reach, check, fix, run, guard, wrap, unwrap, scan, discover, pin, diff, lock, dashboard, watch, version, update-registry, merge, verify, sast, sbom, push-nucleus, shadow, killchain, snapshot, register, advise, baseline (5 sub-commands: save, list, compare, delete, export), rule (3 sub-commands: validate, test, list), policy (3 sub-commands: validate, init, check), extensions (2 sub-commands: discover, scan), agent-files (2 sub-commands: discover, scan), plugins (2 sub-commands: discover, scan), feed (1 sub-command: verify) — verify with `credenzo --help` before each release
 - 56-entry curated dataset of legitimate MCP servers (`registry/known-servers.json`, `docs/registry.md`)
 - 42 community rules ship bundled; the breakdown is under "Data files at project root" above
-- Demo: 75 findings on a first scan of `demo/configs/` (67 once rug-pull state exists; 76 and 68 up to 0.33.0, before STORY-0171 moved the bare "do not mention" out of POISON-012; POISON-070 still reports that text). `tests/test_demo_scan_golden.py` pins the first-scan findings in `tests/golden/demo_scan_findings.json`
+- Demo: 75 findings on a first scan of `demo/configs/` (67 once rug-pull state exists; 76 and 68 up to 0.33.0, before STORY-0171 moved the bare "do not mention" out of POISON-012; POISON-070 still reports that text). Recount before each release: `credenzo scan --path demo/configs/ --format json`. `tests/test_demo_scan_golden.py` pins the first-scan findings without CFHYG-001/002 (67) in `tests/golden/demo_scan_findings.json`
 
 ## Provenance
 

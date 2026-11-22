@@ -29,9 +29,9 @@ import os
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 from mcp_audit.cli import app
+from tests.conftest import split_runner
 
 REPO = Path(__file__).resolve().parent.parent
 DEMO_CONFIGS = REPO / "demo" / "configs"
@@ -39,7 +39,7 @@ GOLDEN = REPO / "tests" / "golden" / "demo_scan_findings.json"
 WRITE_ENV = "CREDENZO_WRITE_DEMO_GOLDEN"
 HOST_DEPENDENT_IDS = frozenset({"CFHYG-001", "CFHYG-002"})
 
-runner = CliRunner()
+runner = split_runner()
 
 
 def _finding_line(finding: dict) -> str:
@@ -54,13 +54,19 @@ def _scan_demo(state_dir: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr(
         "mcp_audit.analyzers.rug_pull.DEFAULT_STATE_PATH", state_dir / "state.json"
     )
-    result = runner.invoke(app, ["scan", str(DEMO_CONFIGS), "-f", "json"])
+    # A legacy ~/.mcp-audit/state_*.json would be copied in and end the first scan.
+    monkeypatch.setattr(
+        "mcp_audit.analyzers.rug_pull._LEGACY_STATE_DIR", state_dir / "no-legacy"
+    )
+    # --offline-registry: a developer's update-registry cache must not change it.
+    result = runner.invoke(
+        app, ["scan", str(DEMO_CONFIGS), "-f", "json", "--offline-registry"]
+    )
     assert result.exit_code == 1, (
         f"the demo scan should exit 1 (findings found), got {result.exit_code}:\n"
         f"{result.output[-2000:]}"
     )
-    out = result.output
-    return json.loads(out[out.index("{") :])
+    return json.loads(result.stdout)
 
 
 def _summary(doc: dict) -> dict:
