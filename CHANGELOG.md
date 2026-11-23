@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **Example workflows use the 0.36.3 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.2 to v0.36.3.
+
 ## [0.36.3] - 2026-11-23
 
 **Upgrade note.** The malicious-package list in this release holds eight more records; a scan that launches one of those packages now reports SC-008. After the first `scan` or `check` in a terminal, Credenzo prints one note to stderr that asks for a GitHub star, one time; `CREDENZO_NO_STAR_PROMPT=1` turns it off. The pull-request comments of `diff` and `lock --verify` and the `killchain` Markdown report end with one line that links the repository. JSON output, SARIF output and the first line of `credenzo version` do not change.

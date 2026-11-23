@@ -36,10 +36,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Credenzo
-        uses: adudley78/credenzo/setup-action@831f6f7c1e67e9d1061e72764b244f43d70a2842 # v0.36.2
+        uses: adudley78/credenzo/setup-action@08f254eb43734c12acdbf7ef00a1b728ba05720c # v0.36.3
 
       - name: Verify the lock and send alerts
-        uses: adudley78/credenzo/team@831f6f7c1e67e9d1061e72764b244f43d70a2842 # v0.36.2
+        uses: adudley78/credenzo/team@08f254eb43734c12acdbf7ef00a1b728ba05720c # v0.36.3
         with:
           # Optional. A Slack incoming webhook accepts the message.
           alert-webhook: ${{ secrets.MCP_ALERT_WEBHOOK }}
