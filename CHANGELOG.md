@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **Example workflows use the 0.36.2 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.1 to v0.36.2.
+
 ## [0.36.2] - 2026-11-23
 
 **Upgrade note for `push-nucleus` and SARIF.** `push-nucleus` now checks the certificate and the host name of the Nucleus server, and it refuses a redirect. For a Nucleus instance with a certificate from a private CA, add `--ca-bundle PATH`. `scan --format sarif` no longer writes `runs[0].invocations[0].properties.account`. A tool that read the user name from that field gets no value.
