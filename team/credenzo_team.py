@@ -56,6 +56,9 @@ INDEX_URL = (
     "https://raw.githubusercontent.com/adudley78/credenzo/team-licenses/index.json"
 )
 INFO_URL = "https://github.com/adudley78/credenzo/blob/main/docs/team.md"
+REPO_URL = "https://github.com/adudley78/credenzo"
+#: Last line of every alert and step summary: who sent it and where it lives.
+SIGNATURE = f"Sent by Credenzo Team: {REPO_URL}"
 DIGEST_PREFIX = "credenzo-team:"
 ISSUE_MARKER = "<!-- credenzo-team-drift"
 ISSUE_LABEL = "credenzo-lock-drift"
@@ -266,6 +269,8 @@ def message(
         "",
         "Review the change. If it is correct, run `credenzo lock --accept`"
         " and commit `mcp-lock.json`.",
+        "",
+        SIGNATURE,
     ]
     return "\n".join(lines)
 
@@ -632,7 +637,7 @@ def _alerts(
         summary = text
     else:
         checked = payload.get("checked_servers", 0) if payload else 0
-        summary = f"Lock verified: {checked} server(s)."
+        summary = f"Lock verified: {checked} server(s).\n\n{SIGNATURE}"
     try:
         _append(
             env.get("GITHUB_STEP_SUMMARY"), f"### Credenzo lock check\n\n{summary}\n"

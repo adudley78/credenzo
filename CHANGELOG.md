@@ -14,10 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Output that people read and share now names the project.** The pull-request comments of `diff --format pr-comment` and `lock --verify --format pr-comment` and the `killchain` Markdown report end with one `<sub>` line that links the repository; the diff comment keeps its 100-line cap, and the comment for a tampered lock gets no line. The HTML dashboard links the name to the repository and adds a "Star on GitHub" link; the link is not loaded, so the file still makes no request. The PDF footer adds the repository URL. Credenzo Team alerts (issue, webhook, step summary) end with "Sent by Credenzo Team" and the URL; the fingerprint is unchanged. `credenzo --help` ends with the repository URL. `credenzo version` adds it as a second line for a person at a terminal only (no CI variable, no `CREDENZO_NO_STAR_PROMPT`); the first line is unchanged, because `setup-action` reads it. `scripts/install.sh` ends with the next command to run and the URL.
+
 - **`scripts/paid_path_report.py` prints only numbers that show use by people.** It printed 2,785 PyPI downloads for the 30 days to 2026-11-22. 2,076 of them (75%) had no operating system: pip and uv always send one, so they came from bots, security scanners, mirrors or browsers. The report now prints PyPI installs (downloads with an operating system) for 7 and 30 days, 709 for the same 30 days, and the share it left out. An install of `credenzo` also downloads `mcp-audit-scanner`, so the installs are those of `mcp-audit-scanner` and the two names are counted once; the `credenzo` part is shown beside them. Repository clones and release downloads are not printed: the CI of this repository makes part of them, and GitHub does not show which part. New: the people other than the owner who opened an issue or a pull request in 30 days (bots are not counted). The installs still include CI runs of users; pypistats.org does not separate them.
 
 ### Documentation
 
+- **README, CONTRIBUTING and release notes ask for a star.** The README has a stars badge and a PyPI badge and one line after the install command. `CONTRIBUTING.md` no longer calls the project open-core. The GitHub Release template ends with one line. The PyPI home page of `mcp-audit-scanner` is now https://credenzo.io, the same as the `credenzo` package.
 - **Example workflows use the 0.36.2 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.1 to v0.36.2.
 
 ## [0.36.2] - 2026-11-23

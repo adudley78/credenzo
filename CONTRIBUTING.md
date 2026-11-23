@@ -1,8 +1,10 @@
-# Contributing to mcp-audit
+# Contributing to Credenzo
 
-Thank you for your interest in contributing. Credenzo is an open-core
-project — the community scanner is Apache 2.0, and we welcome contributions
-to detection rules, the known-server registry, and the core scanner.
+Thank you for your interest in contributing. Credenzo is open source under
+Apache 2.0, and we welcome contributions to detection rules, the known-server
+registry, and the core scanner. The smallest contribution also counts:
+[a star](https://github.com/adudley78/credenzo) helps other teams find the
+project.
 
 ## Ways to contribute
 

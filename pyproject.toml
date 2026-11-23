@@ -99,7 +99,7 @@ mcp-audit = "mcp_audit._entry:main"
 credenzo = "mcp_audit._entry:main"
 
 [project.urls]
-Homepage = "https://github.com/adudley78/credenzo"
+Homepage = "https://credenzo.io"
 Documentation = "https://github.com/adudley78/credenzo#readme"
 Repository = "https://github.com/adudley78/credenzo"
 Issues = "https://github.com/adudley78/credenzo/issues"

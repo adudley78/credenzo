@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.text import Text
 
+from mcp_audit._brand import MD_FOOTER
 from mcp_audit.diff.comparator import Change, ChangeType, EntityType
 from mcp_audit.models import Severity
 
@@ -231,6 +232,7 @@ def render_pr_comment(
 
     if not changes:
         lines.append(f"✅ No MCP changes between `{base_label}` and `{head_label}`.")
+        lines += ["", MD_FOOTER]
         return "\n".join(lines)
 
     counts = _summary_counts(changes)
@@ -339,12 +341,13 @@ def render_pr_comment(
         lines.append(f"*{' · '.join(footer_parts)} across all changes*")
         lines.append("")
 
-    # Trim to 100 lines if needed
-    if len(lines) > 100:
-        lines = lines[:97]
+    # Trim to 100 lines if needed (the footer is one of the 100)
+    if len(lines) > 99:
+        lines = lines[:96]
         lines.append(
             "*…output truncated — run `credenzo diff` locally for full report*"
         )
         lines.append("")
+    lines.append(MD_FOOTER)
 
     return "\n".join(lines)

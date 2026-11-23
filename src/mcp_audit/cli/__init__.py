@@ -62,6 +62,10 @@ _REGISTRY_CACHE_PATH = _USER_CONFIG_DIR / "registry" / "known-servers.json"
 app = typer.Typer(
     name="credenzo",
     help="Privacy-first security scanner for MCP server configurations.",
+    epilog=(
+        "Start with `credenzo check`. Docs, issues and source:"
+        " https://github.com/adudley78/credenzo (a star helps others find it)."
+    ),
     no_args_is_help=True,
 )
 console = Console()

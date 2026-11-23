@@ -203,7 +203,7 @@ def _make_page_callback(
         canvas.drawString(
             0.75 * inch,
             footer_y,
-            "https://credenzo.io",
+            "https://credenzo.io  ·  https://github.com/adudley78/credenzo",
         )
         canvas.drawRightString(
             width - 0.75 * inch,

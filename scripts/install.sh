@@ -78,4 +78,8 @@ else
 fi
 
 echo "Installed credenzo to $INSTALL_DIR/credenzo"
-"$INSTALL_DIR/credenzo" version
+CREDENZO_NO_STAR_PROMPT=1 "$INSTALL_DIR/credenzo" version
+echo
+echo "Next: run 'credenzo check' for a one-page verdict on this machine."
+echo "Credenzo is free and open source. A star helps other teams find it:"
+echo "  https://github.com/${REPO}"
