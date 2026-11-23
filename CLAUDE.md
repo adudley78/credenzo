@@ -144,6 +144,7 @@ src/mcp_audit/
 ├── _paths.py                      # Find bundled data in source, wheel and frozen builds
 ├── _network.py                    # --offline mutual exclusion for network flags
 ├── _entry.py                      # Console script; dispatches `run` and `guard` before Typer loads
+├── _star.py                       # One-time star note after the first terminal `scan`/`check`; no network
 ├── _jcs.py                        # RFC 8785 canonical JSON, stdlib only (used by `run`)
 ├── runtime/                       # `credenzo run` and `guard`: stdlib only on the launch path (docs/run.md)
 │   ├── cli.py                     # argparse for `run`; exit 78 when enforce refuses
@@ -635,7 +636,7 @@ What each feature does is in `README.md`, `docs/README.md` (the index of every d
 Counts that `scripts/update_test_count.py` keeps in sync:
 
 - 8 analyzers: poisoning, credentials, transport, supply chain, rug-pull, toxic flow, config hygiene, auth
-- 11243 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
+- 11278 tests passing; `ruff check src/ tests/` clean (zero errors); `ruff format src/ tests/` clean (zero files requiring reformatting) — verify with `uv run pytest --collect-only -q` before each release
 - 35 top-level CLI commands: affected, vet, reach, check, fix, run, guard, wrap, unwrap, scan, discover, pin, diff, lock, dashboard, watch, version, update-registry, merge, verify, sast, sbom, push-nucleus, shadow, killchain, snapshot, register, advise, baseline (5 sub-commands: save, list, compare, delete, export), rule (3 sub-commands: validate, test, list), policy (3 sub-commands: validate, init, check), extensions (2 sub-commands: discover, scan), agent-files (2 sub-commands: discover, scan), plugins (2 sub-commands: discover, scan), feed (1 sub-command: verify) — verify with `credenzo --help` before each release
 - 56-entry curated dataset of legitimate MCP servers (`registry/known-servers.json`, `docs/registry.md`)
 - 42 community rules ship bundled; the breakdown is under "Data files at project root" above

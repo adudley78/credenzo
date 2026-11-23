@@ -16,6 +16,10 @@ crash reports.
   config. The full list is in
   [privacy.md](privacy.md#commands-that-use-the-network).
 - `credenzo watch` continuous monitoring also runs fully locally.
+- After your first `scan` or `check` in a terminal, one note asks you to star
+  the project on GitHub. It shows once, sends nothing, and records that it was
+  shown in an empty local file. Set `CREDENZO_NO_STAR_PROMPT=1` to turn it
+  off. Details: [privacy.md](privacy.md#the-one-time-star-note).
 - The HTML dashboard is a self-contained file — no beacons, no fonts loaded
   from external CDNs, no JavaScript that phones home.
 

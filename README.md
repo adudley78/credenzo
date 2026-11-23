@@ -503,7 +503,7 @@ Rug-pull state is stored per-config-set at `<user-config-dir>/mcp-audit/state/st
 
 All detection patterns are original implementations based on published security research — no code was copied from existing scanners. Sources include Invariant Labs' tool poisoning disclosure, CrowdStrike's MCP exfiltration research, CyberArk's agent attack demonstrations, the OWASP Agentic Top 10, and MITRE ATLAS agent-specific techniques. Supply chain patterns follow npm package naming conventions; credential patterns follow the publicly documented key formats from AWS, GitHub, OpenAI, Anthropic, Stripe, and others.
 
-11,243 tests validate detection accuracy and guard against regressions.
+11,278 tests validate detection accuracy and guard against regressions.
 
 See [PROVENANCE.md](PROVENANCE.md) for the full list of research sources, framework mappings, and contribution guidelines for new detection rules.
 
@@ -736,7 +736,7 @@ git clone https://github.com/adudley78/credenzo.git
 cd mcp-audit
 uv sync --all-extras
 
-uv run pytest                        # Run all 11,243 tests
+uv run pytest                        # Run all 11,278 tests
 uv run ruff check src/ tests/        # Lint
 uv run bandit -r src/                # Security audit of the scanner itself
 ```
@@ -770,6 +770,11 @@ See [docs/privacy.md](docs/privacy.md) for the exact address, fields and headers
 ---
 
 ## Support
+
+If Credenzo helped you, [star it on GitHub](https://github.com/adudley78/credenzo):
+a star helps other people find the project. After your first scan in a
+terminal, Credenzo asks for this once; set `CREDENZO_NO_STAR_PROMPT=1` to turn
+the note off. It sends nothing ([privacy.md](docs/privacy.md#the-one-time-star-note)).
 
 If `credenzo` saves your team time or prevents a security incident, consider
 [sponsoring the project on GitHub](https://github.com/sponsors/adudley78).

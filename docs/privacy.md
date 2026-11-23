@@ -11,6 +11,12 @@ A plain scan runs entirely on your machine and sends nothing anywhere.  Registra
 - **No crash reports.** Errors are written to your terminal only.
 - **Offline scans.** A plain `credenzo scan` makes zero network connections, and so does `credenzo check` for a user who has not registered.  The scan flags that touch the network (`--verify-hashes`, `--verify-signatures`, `--check-vulns`, `--connect`) are explicitly opt-in.
 
+### The one-time star note
+
+After your first `scan` or `check` in a terminal, Credenzo prints one note to stderr: it asks you to star the project on GitHub and gives the link. It shows the note once. To record that, it writes an empty file, `<user-config-dir>/mcp-audit/star-asked` (`0o600`, in a `0o700` directory). The note sends nothing and opens no connection; Credenzo cannot know whether you starred the project.
+
+The note is never printed in CI (`CI`, `GITHUB_ACTIONS` and other CI variables), when stdout or stderr is a pipe or a file, after `--help`, after an error (exit code 2), or by `run` and `guard`. To turn it off before it shows, set `CREDENZO_NO_STAR_PROMPT=1`. To see it again, delete the file. The code is `src/mcp_audit/_star.py`.
+
 ### Commands that use the network
 
 | Command | What it contacts | When |
