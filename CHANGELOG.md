@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **A one-time note that asks for a GitHub star.** After the first `scan` or `check` that ends with exit code 0 or 1 in a terminal, Credenzo prints one note to stderr with the repository link, and never again. It is never printed in CI, to a pipe or a file, after `--help` or an error, or by `run` and `guard`, so no script, hook, JSON or SARIF output changes. It sends nothing. An empty file, `<user-config-dir>/mcp-audit/star-asked` (`0o600`), records that the note was shown; when that file cannot be written the note is not printed. `CREDENZO_NO_STAR_PROMPT=1` turns it off. pip cannot show a message at install time (a wheel has no install hook), so the first scan is the first point where a person can see it.
+
 ### Changed
 
 - **`scripts/paid_path_report.py` prints only numbers that show use by people.** It printed 2,785 PyPI downloads for the 30 days to 2026-11-22. 2,076 of them (75%) had no operating system: pip and uv always send one, so they came from bots, security scanners, mirrors or browsers. The report now prints PyPI installs (downloads with an operating system) for 7 and 30 days, 709 for the same 30 days, and the share it left out. An install of `credenzo` also downloads `mcp-audit-scanner`, so the installs are those of `mcp-audit-scanner` and the two names are counted once; the `credenzo` part is shown beside them. Repository clones and release downloads are not printed: the CI of this repository makes part of them, and GitHub does not show which part. New: the people other than the owner who opened an issue or a pull request in 30 days (bots are not counted). The installs still include CI runs of users; pypistats.org does not separate them.

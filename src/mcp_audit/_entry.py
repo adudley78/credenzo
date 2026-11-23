@@ -65,7 +65,26 @@ def main() -> None:
 
     from mcp_audit.cli import main as cli_main
 
-    cli_main()
+    try:
+        cli_main()
+    except SystemExit as stop:
+        _star_note(stop.code)
+        raise
+    _star_note(0)
+
+
+def _star_note(code: object) -> None:
+    """After the first ``scan`` or ``check`` in a terminal, ask for a star once.
+
+    ``mcp_audit._star`` decides; it never raises and never changes the exit
+    code. ``run`` and ``guard`` return above and never get here.
+    """
+    try:
+        from mcp_audit import _star
+
+        _star.after_command(sys.argv[1:], code)
+    except Exception:  # noqa: BLE001 - a note must never change the exit code.
+        return
 
 
 if __name__ == "__main__":

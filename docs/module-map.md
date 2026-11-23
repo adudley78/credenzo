@@ -67,6 +67,7 @@ src/mcp_audit/
 ├── _paths.py          # data_dir() and resolve_bundled_resource() — shared helpers for locating bundled data in source, wheel, and PyInstaller frozen contexts
 ├── _network.py        # NetworkPolicy + require_offline_compatible() — centralised --offline mutual-exclusion enforcement for network-touching flags
 ├── _entry.py          # Console-script entry: dispatches `run` to runtime/ before the Typer app (and the scanner) is imported (EPIC-0009)
+├── _star.py          # The one-time star note (stderr) after the first `scan`/`check` in a terminal; never in CI, a pipe, after --help or exit 2, or for run/guard; marker `<user-config-dir>/mcp-audit/star-asked` (0o600, O_EXCL so it shows once); `CREDENZO_NO_STAR_PROMPT`; no network (tests/test_star.py pins that); called by `_entry.main` after the Typer app exits
 ├── _jcs.py            # RFC 8785 canonical JSON (moved from advisory/canonical.py, which re-exports it) so the `run` launch path can digest tools without the advisory package
 ├── runtime/           # `credenzo run` (EPIC-0009, docs/run.md), stdlib-only on the launch path (tests/test_runtime_entry.py, test_runtime_gate.py pin the imports)
 │   ├── cli.py         # argparse for run: --config/--server/--lock/--mode; gate → relay; exit 78 when enforce refuses
