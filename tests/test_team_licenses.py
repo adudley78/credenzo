@@ -325,8 +325,9 @@ def _jobs() -> dict:
 
 
 def test_the_schedule_waits_for_the_offer_file_and_for_nothing_else() -> None:
-    """The schedule ran no job for two days after go-live (2026-11-21): it
-    waited for a repository variable that the job condition did not see."""
+    """The schedule ran no job for two days after go-live (2026-11-21): each
+    scheduled run was skipped while it waited for a repository variable. The
+    cause on the settings side was not found."""
     jobs = _jobs()
     build = jobs["build"]
     assert build["needs"] == "gate"

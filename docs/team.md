@@ -270,6 +270,8 @@ For the maintainer. Do these once.
    once. From then on the schedule runs by itself: it reads `live_since` in
    `team/offer.json`. (Until 2026-11-23 a repository variable,
    `TEAM_LICENSES_LIVE`, opened the schedule. It is not read any more.)
+   To close the offer later, set `live_since` back to `null`, merge, and run
+   the workflow once by hand: that run publishes `live: false`.
 
 The 90 days of the experiment start on the date that step 4 records.
 `scripts/paid_path_report.py` prints the weekly numbers and the decision.

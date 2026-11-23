@@ -16,8 +16,10 @@ name: Team licence list
 # repository variable, TEAM_LICENSES_LIVE. After subscriptions opened on
 # 2026-11-21, each scheduled run was still skipped, so the list was not
 # refreshed and a new subscriber would not have got alerts. The offer file is
-# the one definition of "live" (the action and the site read it too), so the
-# schedule now reads the same file.
+# the one definition of "live": the site reads it, and the list that the
+# action reads is built from it. So the schedule now reads the same file.
+# To close the offer, set `live_since` back to null and run this workflow one
+# time by hand: that run publishes `live: false`, and the schedule then stops.
 #
 # Three jobs. `gate` holds no secret. The other two are split for the same
 # reason as advisory-feed-publish.yml:
