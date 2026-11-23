@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "description": "OSV malicious-package (MAL-*) records for npm and PyPI packages whose name contains 'mcp', names a coding agent or an agent skill (AGENT_STACK_TOKENS in the script), or that registry/known-servers.json lists. Matched offline by exact name (SC-008, mcp-audit vet, mcp-audit affected). Written by scripts/sync_registry_advisories.py --write; do not edit by hand.",
   "source": "https://osv.dev (OpenSSF malicious-packages, via OSV's bulk export)",
-  "last_updated": "2026-11-14",
-  "entry_count": 341,
+  "last_updated": "2026-11-23",
+  "entry_count": 349,
   "entries": [
     {
       "id": "MAL-2026-2669",
@@ -372,6 +372,23 @@
       "published": "2026-09-17T12:43:45Z",
       "versions": [
         "0.1.0"
+      ],
+      "ranges": []
+    },
+    {
+      "id": "MAL-2026-20068",
+      "ecosystem": "PyPI",
+      "name": "mcp-aevo-server",
+      "aliases": [],
+      "summary": "Malicious code in mcp-aevo-server (PyPI)",
+      "published": "2026-11-17T14:45:00Z",
+      "versions": [
+        "0.2.0",
+        "0.2.0.post1",
+        "0.2.0.post2",
+        "0.2.0.post3",
+        "0.2.0.post4",
+        "0.2.0.post6"
       ],
       "ranges": []
     },
@@ -1810,6 +1827,19 @@
       "ranges": []
     },
     {
+      "id": "MAL-2026-20187",
+      "ecosystem": "npm",
+      "name": "@fdcasj_dfew/md-doc-mcp",
+      "aliases": [],
+      "summary": "Malicious code in @fdcasj_dfew/md-doc-mcp (npm)",
+      "published": "2026-11-18T17:00:00Z",
+      "versions": [
+        "1.0.0",
+        "1.0.1"
+      ],
+      "ranges": []
+    },
+    {
       "id": "MAL-2026-19159",
       "ecosystem": "npm",
       "name": "@go-gost/mcp-darwin-x64",
@@ -1836,6 +1866,29 @@
         "1.0.13"
       ],
       "ranges": []
+    },
+    {
+      "id": "MAL-2026-20295",
+      "ecosystem": "npm",
+      "name": "@guicai777/mcp-doctor",
+      "aliases": [
+        "GHSA-h82f-cjm4-g22r"
+      ],
+      "summary": "Malicious code in @guicai777/mcp-doctor (npm)",
+      "published": "2026-11-20T06:02:31Z",
+      "versions": [
+        "1.0.1"
+      ],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "MAL-2026-14315",
@@ -1927,7 +1980,9 @@
       "id": "MAL-2026-18489",
       "ecosystem": "npm",
       "name": "@ifasn/mmdd-doc-mcp",
-      "aliases": [],
+      "aliases": [
+        "GHSA-vm4g-cpqx-24px"
+      ],
       "summary": "Malicious code in @ifasn/mmdd-doc-mcp (npm)",
       "published": "2026-11-02T20:58:12Z",
       "versions": [
@@ -1950,21 +2005,41 @@
         "2.0.4",
         "2.1.1"
       ],
-      "ranges": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ],
       "note": "Reported by Tamir Isaschar (Knostic), 2026-11-09, static review only: https://www.knostic.ai/blog/more-than-markdown-hidden-data-collection-in-two-mcp-packages. A 'Markdown toolkit' MCP server from the npm account ifasn whose 2.1.1 runs deepAudit() at launch, with no tool call: it collects the names and value lengths of credential-like environment variables and the first 200 characters of command lines containing -D, password, secret or jasypt, and sends the report over plain HTTP to 121.199.24.94."
     },
     {
       "id": "MAL-2026-18603",
       "ecosystem": "npm",
       "name": "@ifasn/ms-doc-mcp",
-      "aliases": [],
+      "aliases": [
+        "GHSA-3f74-wcv7-jw8f"
+      ],
       "summary": "Malicious code in @ifasn/ms-doc-mcp (npm)",
       "published": "2026-11-04T06:11:33Z",
       "versions": [
         "2.0.9",
         "2.1.1"
       ],
-      "ranges": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ],
       "note": "Reported by Tamir Isaschar (Knostic), 2026-11-09, static review only: https://www.knostic.ai/blog/more-than-markdown-hidden-data-collection-in-two-mcp-packages. A 'Markdown toolkit' MCP server from the npm account ifasn whose 2.1.1 runs envAudit() at launch: it writes the full values of environment variables whose names match KEY, TOKEN, SECRET, ALIBABA, DASHSCOPE or CREDENTIAL to stderr and to output/env_audit.txt; Knostic found no code that sends the report out."
     },
     {
@@ -2610,6 +2685,48 @@
       "ranges": []
     },
     {
+      "id": "MAL-2026-20008",
+      "ecosystem": "npm",
+      "name": "@shadowdqj/image-mcp",
+      "aliases": [
+        "GHSA-56mh-v6h4-jx2f"
+      ],
+      "summary": "Malicious code in @shadowdqj/image-mcp (npm)",
+      "published": "2026-11-16T19:58:41Z",
+      "versions": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MAL-2026-20009",
+      "ecosystem": "npm",
+      "name": "@shadowdu/memos-mcp",
+      "aliases": [
+        "GHSA-37hh-cmfp-pf7g"
+      ],
+      "summary": "Malicious code in @shadowdu/memos-mcp (npm)",
+      "published": "2026-11-16T19:58:41Z",
+      "versions": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "MAL-2026-10456",
       "ecosystem": "npm",
       "name": "@spzhongwin/skill-logger-plugin",
@@ -2641,6 +2758,27 @@
         "0.9.5"
       ],
       "ranges": []
+    },
+    {
+      "id": "MAL-2026-20104",
+      "ecosystem": "npm",
+      "name": "@tnhorg/agent-skills",
+      "aliases": [
+        "GHSA-fv82-jh67-xx7q"
+      ],
+      "summary": "Malicious code in @tnhorg/agent-skills (npm)",
+      "published": "2026-11-18T00:24:40Z",
+      "versions": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "MAL-2026-1642",
@@ -5324,6 +5462,27 @@
       ]
     },
     {
+      "id": "MAL-2026-20011",
+      "ecosystem": "npm",
+      "name": "mem0-mcp-server",
+      "aliases": [
+        "GHSA-9hvg-j8mj-55xr"
+      ],
+      "summary": "Malicious code in mem0-mcp-server (npm)",
+      "published": "2026-11-16T19:58:40Z",
+      "versions": [],
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {
+              "introduced": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "MAL-2026-10013",
       "ecosystem": "npm",
       "name": "n8n-nodes-mcputils",
@@ -5473,7 +5632,9 @@
         "4.1.39",
         "4.1.40",
         "4.1.42",
-        "4.1.43"
+        "4.1.43",
+        "4.1.47",
+        "4.1.48"
       ],
       "ranges": []
     },
@@ -6118,6 +6279,22 @@
           ]
         }
       ]
+    },
+    {
+      "id": "MAL-2026-20061",
+      "ecosystem": "npm",
+      "name": "vamp-mcp",
+      "aliases": [
+        "GHSA-q37r-5xxr-6v4x"
+      ],
+      "summary": "Malicious code in vamp-mcp (npm)",
+      "published": "2026-11-17T10:09:54Z",
+      "versions": [
+        "0.2.3",
+        "0.2.4",
+        "0.2.5"
+      ],
+      "ranges": []
     },
     {
       "id": "MAL-2025-192601",

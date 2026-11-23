@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "last_updated": "2026-11-14",
+  "last_updated": "2026-11-23",
   "entry_count": 56,
   "entries": [
     {
@@ -498,7 +498,8 @@
         "CVE-2026-59951",
         "CVE-2026-116684",
         "CVE-2026-116685",
-        "CVE-2026-116686"
+        "CVE-2026-116686",
+        "CVE-2026-115563"
       ],
       "known_vulns": [
         {
@@ -572,6 +573,12 @@
           "cve": "CVE-2026-116686",
           "cvss": null,
           "description": "Model Context Protocol Python SDK: Client fetched server-chosen $ref URLs while validating tool results against output schemas",
+          "fixed_in": "2.2.0"
+        },
+        {
+          "cve": "CVE-2026-115563",
+          "cvss": null,
+          "description": "Model Context Protocol Python SDK: OAuth client could send credentials to an authorization server chosen by the MCP server",
           "fixed_in": "2.2.0"
         }
       ]
