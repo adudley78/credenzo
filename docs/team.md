@@ -266,8 +266,10 @@ For the maintainer. Do these once.
        --portal-url https://billing.stripe.com/p/login/...
    ```
 
-5. Set the repository variable `TEAM_LICENSES_LIVE` to `true` and run the
-   "Team licence list" workflow once.
+5. Merge that commit to `main` and run the "Team licence list" workflow
+   once. From then on the schedule runs by itself: it reads `live_since` in
+   `team/offer.json`. (Until 2026-11-23 a repository variable,
+   `TEAM_LICENSES_LIVE`, opened the schedule. It is not read any more.)
 
 The 90 days of the experiment start on the date that step 4 records.
 `scripts/paid_path_report.py` prints the weekly numbers and the decision.
