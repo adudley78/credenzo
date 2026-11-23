@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.3] - 2026-11-23
+
+**Upgrade note.** The malicious-package list in this release holds eight more records; a scan that launches one of those packages now reports SC-008. After the first `scan` or `check` in a terminal, Credenzo prints one note to stderr that asks for a GitHub star, one time; `CREDENZO_NO_STAR_PROMPT=1` turns it off. The pull-request comments of `diff` and `lock --verify` and the `killchain` Markdown report end with one line that links the repository. JSON output, SARIF output and the first line of `credenzo version` do not change.
+
 ### Security
 
 - **Eight more malicious packages are caught offline, and one more CVE of the MCP Python SDK.** `registry/known-malicious.json` adds the OSV malicious-package records that were published from 2026-11-16 on: PyPI `mcp-aevo-server`; npm `@fdcasj_dfew/md-doc-mcp`, `@guicai777/mcp-doctor`, `@shadowdqj/image-mcp`, `@shadowdu/memos-mcp`, `@tnhorg/agent-skills`, `mem0-mcp-server` and `vamp-mcp` (349 records, up from 341). A scan that launches one of them, or `vet` on one, now reports SC-008. Three records changed in OSV and the mirror follows: `@ifasn/mmdd-doc-mcp` and `@ifasn/ms-doc-mcp` got a range and a GHSA alias, and `opencode-skills-collection` got more versions. `registry/known-servers.json` adds CVE-2026-115563 to `mcp` (PyPI): the OAuth client could send credentials to an authorization server that the MCP server chose; fixed in 2.2.0. SC-004 and `vet` now report it for an older pinned version. Found by the weekly `registry-advisory-sync.yml` check of 2026-11-23. Until the next release, `credenzo update-registry` gets the new CVE; the malicious-package list comes with the release.
