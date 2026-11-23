@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -322,8 +324,70 @@ def _jobs() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]
 
 
-def test_the_schedule_waits_for_the_repository_variable() -> None:
-    assert "vars.TEAM_LICENSES_LIVE == 'true'" in _jobs()["build"]["if"]
+def test_the_schedule_waits_for_the_offer_file_and_for_nothing_else() -> None:
+    """The schedule ran no job for two days after go-live (2026-11-21): each
+    scheduled run was skipped while it waited for a repository variable. The
+    cause on the settings side was not found."""
+    jobs = _jobs()
+    build = jobs["build"]
+    assert build["needs"] == "gate"
+    assert build["if"] == (
+        "github.event_name != 'schedule' || needs.gate.outputs.live == 'true'"
+    )
+    assert "vars." not in WORKFLOW.read_text(encoding="utf-8").split("\non:\n", 1)[1]
+    gate = jobs["gate"]
+    assert gate["permissions"] == {"contents": "read"}
+    assert "environment" not in gate  # the job that decides holds no secret
+    assert gate["outputs"] == {"live": "${{ steps.offer.outputs.live }}"}
+
+
+def _gate_says(offer: dict, tmp_path: Path) -> str:
+    """Run the gate step's own script on *offer*; return what it writes."""
+    step = next(s for s in _jobs()["gate"]["steps"] if s.get("id") == "offer")
+    script = step["run"].split("<<'PY'", 1)[1].split("\n", 1)[1].rsplit("PY", 1)[0]
+    (tmp_path / "team").mkdir()
+    (tmp_path / "team" / "offer.json").write_text(json.dumps(offer), encoding="utf-8")
+    done = subprocess.run(  # noqa: S603
+        [sys.executable, "-I", "-c", textwrap.dedent(script)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return done.stdout.strip()
+
+
+def test_the_gate_reads_the_offer_file_of_this_repository(tmp_path: Path) -> None:
+    offer = json.loads((ROOT / "team" / "offer.json").read_text(encoding="utf-8"))
+    assert _gate_says(offer, tmp_path) == f"live={_live_by_the_script(offer)}"
+
+
+def _live_by_the_script(offer: dict) -> str:
+    """What scripts/team_licenses.py publishes as ``offer.live``."""
+    index = lic.build_index(offer, set(), "s" * 64)
+    return "true" if index["offer"]["live"] else "false"
+
+
+@pytest.mark.parametrize(
+    ("offer", "live"),
+    [
+        (
+            {"live_since": "2026-11-21", "checkout_url": "https://buy.stripe.com/x"},
+            "true",
+        ),
+        ({"live_since": None, "checkout_url": "https://buy.stripe.com/x"}, "false"),
+        ({"live_since": "2026-11-21", "checkout_url": None}, "false"),
+        ({"live_since": "", "checkout_url": ""}, "false"),
+        ({}, "false"),
+    ],
+)
+def test_the_gate_and_the_script_agree_on_live(
+    offer: dict, live: str, tmp_path: Path
+) -> None:
+    """One definition: a date and a checkout link. The gate holds a copy of
+    the script's rule, and this test holds the two equal."""
+    assert _gate_says(offer, tmp_path) == f"live={live}"
+    assert _live_by_the_script(offer) == live
 
 
 def test_the_job_with_the_secrets_cannot_write_and_installs_nothing() -> None:

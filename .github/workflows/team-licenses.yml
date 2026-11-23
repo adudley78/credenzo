@@ -10,11 +10,19 @@ name: Team licence list
 # and the action works when the next run publishes the list (GitHub does not
 # start each scheduled run, so allow up to 12 hours; see docs/team.md).
 #
-# The schedule does nothing until the repository variable TEAM_LICENSES_LIVE
-# is `true`. Set it when the Stripe payment link exists (docs/team.md,
-# "Opening subscriptions").
+# The schedule does nothing until `team/offer.json` holds the date that
+# subscriptions opened (`live_since`, written by scripts/team_go_live.py).
+# The `gate` job reads that file. Until 2026-11-23 the schedule waited for a
+# repository variable, TEAM_LICENSES_LIVE. After subscriptions opened on
+# 2026-11-21, each scheduled run was still skipped, so the list was not
+# refreshed and a new subscriber would not have got alerts. The offer file is
+# the one definition of "live": the site reads it, and the list that the
+# action reads is built from it. So the schedule now reads the same file.
+# To close the offer, set `live_since` back to null and run this workflow one
+# time by hand: that run publishes `live: false`, and the schedule then stops.
 #
-# Two jobs, split for the same reason as advisory-feed-publish.yml:
+# Three jobs. `gate` holds no secret. The other two are split for the same
+# reason as advisory-feed-publish.yml:
 #
 #   build:   contents: read. `environment: team-licenses` (restricted to
 #            `main`) holds the two secrets: STRIPE_API_KEY, a restricted key
@@ -40,9 +48,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    name: Are subscriptions open?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      live: ${{ steps.offer.outputs.live }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: team/offer.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read team/offer.json
+        id: offer
+        run: |
+          python3 -I - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          offer = json.load(open("team/offer.json", encoding="utf-8"))
+          live = bool(offer.get("live_since")) and bool(offer.get("checkout_url"))
+          print("live=" + ("true" if live else "false"))
+          PY
+
   build:
     name: Build the licence list
-    if: github.event_name != 'schedule' || vars.TEAM_LICENSES_LIVE == 'true'
+    needs: gate
+    if: github.event_name != 'schedule' || needs.gate.outputs.live == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: team-licenses
