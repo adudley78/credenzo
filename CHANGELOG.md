@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`scripts/paid_path_report.py` prints only numbers that show use by people.** It printed 2,785 PyPI downloads for the 30 days to 2026-11-22. 2,076 of them (75%) had no operating system: pip and uv always send one, so they came from bots, security scanners, mirrors or browsers. The report now prints PyPI installs (downloads with an operating system) for 7 and 30 days, 709 for the same 30 days, and the share it left out. An install of `credenzo` also downloads `mcp-audit-scanner`, so the installs are those of `mcp-audit-scanner` and the two names are counted once; the `credenzo` part is shown beside them. Repository clones and release downloads are not printed: the CI of this repository makes part of them, and GitHub does not show which part. New: the people other than the owner who opened an issue or a pull request in 30 days (bots are not counted). The installs still include CI runs of users; pypistats.org does not separate them.
+
 ### Documentation
 
 - **Example workflows use the 0.36.2 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.1 to v0.36.2.
