@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from mcp_audit._brand import MD_FOOTER
 from mcp_audit.analyzers.attack_paths import _SEVERITY_ORDER
 from mcp_audit.killchain.recommender import KillSwitch
 from mcp_audit.models import AttackPathSummary, Severity  # noqa: F401
@@ -94,7 +95,7 @@ def render_markdown(
             "No reachable attack paths — no changes recommended.",
             "",
         ]
-        return "\n".join(lines)
+        return "\n".join([*lines, MD_FOOTER, ""])
 
     # ── No changes produced (degenerate case) ────────────────────────────────
     if not switches:
@@ -102,7 +103,7 @@ def render_markdown(
             "_No actionable kill switches could be derived from the attack-path graph._",  # noqa: E501
             "",
         ]
-        return "\n".join(lines)
+        return "\n".join([*lines, MD_FOOTER, ""])
 
     # ── All-independent-paths notice ─────────────────────────────────────────
     # When every kill switch removes exactly 1 path, there is no shared edge.
@@ -177,7 +178,7 @@ def render_markdown(
                 "",
             ]
 
-    return "\n".join(lines)
+    return "\n".join([*lines, MD_FOOTER, ""])
 
 
 # ── JSON renderer ─────────────────────────────────────────────────────────────

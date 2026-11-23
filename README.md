@@ -9,6 +9,8 @@
 [![CI](https://github.com/adudley78/credenzo/actions/workflows/ci.yml/badge.svg)](https://github.com/adudley78/credenzo/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Open VSX](https://img.shields.io/open-vsx/v/mcp-audit/mcp-audit-vscode)](https://open-vsx.org/extension/mcp-audit/mcp-audit-vscode)
+[![PyPI](https://img.shields.io/pypi/v/credenzo)](https://pypi.org/project/credenzo/)
+[![GitHub stars](https://img.shields.io/github/stars/adudley78/credenzo?style=social)](https://github.com/adudley78/credenzo/stargazers)
 
 [![Credenzo in 58 seconds: why agent files are a risk, how a scan works, and what it checks](docs/media/explainer-thumb.jpg)](https://credenzo.io/assets/credenzo-explainer.mp4)
 
@@ -17,6 +19,8 @@ pip install credenzo
 ```
 
 > The CLI command is `credenzo`. `uv tool install credenzo` and `pipx install credenzo` also work.
+
+Then run `credenzo check` for a one-page verdict on this machine. If Credenzo is useful to you, [star the repository](https://github.com/adudley78/credenzo/stargazers): a star is how other teams find it.
 
 ## Lock the MCP servers you approved
 
@@ -503,7 +507,7 @@ Rug-pull state is stored per-config-set at `<user-config-dir>/mcp-audit/state/st
 
 All detection patterns are original implementations based on published security research — no code was copied from existing scanners. Sources include Invariant Labs' tool poisoning disclosure, CrowdStrike's MCP exfiltration research, CyberArk's agent attack demonstrations, the OWASP Agentic Top 10, and MITRE ATLAS agent-specific techniques. Supply chain patterns follow npm package naming conventions; credential patterns follow the publicly documented key formats from AWS, GitHub, OpenAI, Anthropic, Stripe, and others.
 
-11,286 tests validate detection accuracy and guard against regressions.
+11,295 tests validate detection accuracy and guard against regressions.
 
 See [PROVENANCE.md](PROVENANCE.md) for the full list of research sources, framework mappings, and contribution guidelines for new detection rules.
 
@@ -736,7 +740,7 @@ git clone https://github.com/adudley78/credenzo.git
 cd mcp-audit
 uv sync --all-extras
 
-uv run pytest                        # Run all 11,286 tests
+uv run pytest                        # Run all 11,295 tests
 uv run ruff check src/ tests/        # Lint
 uv run bandit -r src/                # Security audit of the scanner itself
 ```
@@ -789,13 +793,11 @@ Action that sends an alert when an MCP server or a tool changes without
 review. It is free for personal accounts and public repositories, and $99 a
 month for the private repositories of an organization.
 
-If Credenzo is useful to you, a star helps others find it.
-
 Not in a position to sponsor? You can help just as much by:
 
 - **Opening issues** with real-world MCP configs that produce false positives or misses
 - **Contributing rules** — the [policy-as-code engine](docs/writing-rules.md) accepts community YAML rules
-- **Starring the repo** so other teams can find it
+- **Sharing a result**: a `credenzo check` verdict, a PR comment or a dashboard screenshot shows other teams what the tool finds
 
 ## Contributing Detection Rules
 

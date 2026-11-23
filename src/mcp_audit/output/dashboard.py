@@ -239,6 +239,9 @@ body{
   font-family:"JetBrains Mono",ui-monospace,"Cascadia Code","Fira Code",monospace;font-size:13px;font-weight:400;
   color:var(--text-dim);
 }
+a.logo-name{text-decoration:none}
+.logo-star{font-size:12px;color:var(--text-dim);text-decoration:none;margin-left:6px}
+.logo-star:hover,a.logo-name:hover{text-decoration:underline}
 .top-right{display:flex;align-items:center;gap:14px}
 .top-stats{display:flex;align-items:center;gap:18px}
 .machine-bar{
@@ -443,8 +446,12 @@ body{
   <!-- Top bar -->
   <header class="top-bar">
     <div class="logo">
-      <span class="logo-name">Credenzo</span>
+      <a class="logo-name" href="https://github.com/adudley78/credenzo"
+         target="_blank" rel="noopener noreferrer">Credenzo</a>
       <span class="logo-ver" id="logo-ver"></span>
+      <a class="logo-star" href="https://github.com/adudley78/credenzo"
+         target="_blank" rel="noopener noreferrer"
+         title="Credenzo is free and open source. A star helps others find it.">★ Star on GitHub</a>
     </div>
     <div class="top-right">
     <button class="theme-toggle" id="theme-toggle"

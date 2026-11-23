@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from mcp_audit._brand import MD_FOOTER
 from mcp_audit.advisory.canonical import CanonicalError
 from mcp_audit.analyzers.rug_pull import server_key
 from mcp_audit.analyzers.supply_chain import (
@@ -1295,6 +1296,7 @@ def render_pr_comment(result: VerifyResult) -> str:
     lines = ["## credenzo lock"]
     if not result.findings and not result.unverified:
         lines.append(f"\n{result.checked_servers} server(s) verified.")
+        lines.append(f"\n{MD_FOOTER}")
         return "\n".join(lines) + "\n"
     for finding in result.findings:
         lines.append(f"\n### {finding.id} · {finding.severity.value}")
@@ -1319,6 +1321,7 @@ def render_pr_comment(result: VerifyResult) -> str:
         lines.append(_fence(_shown(item.reason, 500)))
     for note in result.tool_text_notes:
         lines.append("\n" + _fence(_shown(note, 500)))
+    lines.append(f"\n{MD_FOOTER}")
     out = "\n".join(lines) + "\n"
     if len(out) > _COMMENT_LIMIT:
         out = (
