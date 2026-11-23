@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.2] - 2026-11-23
+
+**Upgrade note for `push-nucleus` and SARIF.** `push-nucleus` now checks the certificate and the host name of the Nucleus server, and it refuses a redirect. For a Nucleus instance with a certificate from a private CA, add `--ca-bundle PATH`. `scan --format sarif` no longer writes `runs[0].invocations[0].properties.account`. A tool that read the user name from that field gets no value.
+
 ### Security
 
 - **`scripts/install.sh` installed a page of text as the binary, with no check.** The script (`curl … install.sh | sh` in `docs/enterprise-deployment.md`) always asked for v0.1.0, which was never released. `curl` without `-f` wrote GitHub's "Not Found" body to `/usr/local/bin/credenzo`, made it executable, and pointed an existing `/usr/local/bin/mcp-audit` (a pip install, for example) at it. Nothing checked the download, and under `sh` on Debian and Ubuntu (dash) it stopped at `set -o pipefail`. The script is now POSIX `sh`: it installs the latest release or `CREDENZO_VERSION`, checks the build provenance with `gh attestation verify` as `setup-action` does (no install when the check fails or `gh` is missing, unless `CREDENZO_SKIP_VERIFY=1`), and leaves an `mcp-audit` that is not a link alone. `tests/test_install_script.py` runs it with stub tools.

@@ -48,7 +48,7 @@ with one result per finding. Every result includes:
 credenzo scan --format sarif -o mcp-audit.sarif
 
 # Or use the GitHub Action (uploads automatically)
-uses: adudley78/credenzo@v0.36.1
+uses: adudley78/credenzo@v0.36.2
 with:
   sarif-output: mcp-audit.sarif
   upload-sarif: 'true'
