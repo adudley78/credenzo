@@ -8,8 +8,9 @@ The experiment has one rule, set before it started:
   paying customers or less than $300 of monthly revenue. At $99 a month,
   3 customers are $297, so the stop line needs 4 customers.
 
-This script reads the numbers that are public (GitHub, PyPI) through the
-``gh`` command and applies the rule to the two numbers that are not: paying
+This script reads the numbers that are public (GitHub through the ``gh``
+command, PyPI through pypistats.org) and applies the rule to the two numbers
+that are not: paying
 customers and monthly revenue. Give those with ``--customers`` and ``--mrr``
 (read them from the Stripe dashboard). They are not read from Stripe here and
 are not written anywhere, so a run of this script in a public log shows
@@ -18,6 +19,18 @@ nothing private unless you pass them.
 Not measured, on purpose: guard blocks, and locks or checks in private
 repositories. Credenzo sends no telemetry (docs/telemetry.md), so the only
 usage numbers are the public ones below.
+
+Only numbers that show use by people are printed. These are left out:
+
+- PyPI downloads with no operating system. pip, uv and the other installers
+  send it; bots, security scanners, mirrors and browsers do not. In November
+  2026 they were 75% of all downloads.
+- Repository clones and release downloads. The CI of this repository makes
+  part of them on each run, and GitHub does not show which part.
+
+The PyPI installs are those of ``mcp-audit-scanner``. An install of
+``credenzo`` also installs ``mcp-audit-scanner`` (the code is there), so the
+two names are counted once. The installs still include CI runs of users.
 
 Usage::
 
@@ -63,7 +76,32 @@ SEARCHES = {
 }
 SEARCH_PAUSE_SECONDS = 7  # The code search API allows 10 requests a minute.
 
+OWNER = REPO.split("/")[0]
+#: The distribution that holds the code, and the name that installs it.
+PYPI_CODE_PACKAGE = "mcp-audit-scanner"
+PYPI_NAME_PACKAGE = "credenzo"
+PYPI_PAUSE_SECONDS = 3  # pypistats.org answers 429 to fast requests.
+
+#: The words printed for each number. A key that is not here is not printed.
+LABELS = {
+    "stars": "stars",
+    "forks": "forks",
+    "visitors_14_days": "unique visitors, 14 days (the owner included)",
+    "people_who_opened_an_issue_or_pr_30_days": "people other than the owner"
+    " who opened an issue or pull request, 30 days",
+    "pypi_installs_7_days": "PyPI installs, 7 days",
+    "pypi_installs_30_days": "PyPI installs, 30 days",
+    "pypi_installs_30_days_with_the_name_credenzo": "of these, with the name credenzo",
+    "pypi_downloads_30_days_with_no_installer_percent": "PyPI downloads with no"
+    " installer (left out), %",
+    "latest_release": "latest release",
+    "public_repos_with_a_credenzo_lock": "public repos with a Credenzo lock",
+    "public_repos_that_run_the_action": "public repos that run the action",
+    "public_repos_that_run_the_team_action": "public repos that run the Team action",
+}
+
 Api = Callable[[str, dict[str, str]], Any]
+PyPI = Callable[[str], Any]
 
 
 def decide(
@@ -124,16 +162,73 @@ def gh_api(path: str, fields: dict[str, str]) -> Any:
         return None
 
 
-def pypi_last_month(package: str = "mcp-audit-scanner") -> int | None:
-    """Return last month's PyPI downloads from pypistats.org, when reachable."""
-    url = f"https://pypistats.org/api/packages/{package}/recent"
+def pypistats_system(package: str) -> Any:
+    """Return the daily downloads by operating system from pypistats.org.
+
+    Each row is ``{"category": "Linux" | ... | "null", "date": ..., "downloads": n}``.
+    ``None`` when the site cannot be read.
+    """
+    url = f"https://pypistats.org/api/packages/{package}/system"
     try:
         # A constant https URL of pypistats.org.
         opened = urllib.request.urlopen(url, timeout=20)  # noqa: S310  # nosec B310
         with opened as response:
-            return int(json.loads(response.read())["data"]["last_month"])
+            rows = json.loads(response.read())["data"]
+        return rows if isinstance(rows, list) else None
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def pypi_counts(rows: Any, days: int) -> dict[str, int] | None:
+    """Count the downloads of the last ``days`` days of data.
+
+    ``installs`` have an operating system (pip, uv and other installers send
+    one). ``no_installer`` have none: bots, scanners, mirrors and browsers.
+    pypistats.org is one day late, so the window ends on its last date.
+    """
+    if not isinstance(rows, list):
+        return None
+    valid = [
+        r
+        for r in rows
+        if isinstance(r, dict)
+        and isinstance(r.get("date"), str)
+        and isinstance(r.get("downloads"), int)
+    ]
+    if not valid:
+        return None
+    try:
+        end = max(date.fromisoformat(r["date"]) for r in valid)
+        start = end.toordinal() - days + 1
+        window = [
+            r for r in valid if date.fromisoformat(r["date"]).toordinal() >= start
+        ]
+    except ValueError:
+        return None
+    no_installer = sum(r["downloads"] for r in window if r.get("category") == "null")
+    total = sum(r["downloads"] for r in window)
+    return {"installs": total - no_installer, "no_installer": no_installer}
+
+
+def people_who_opened(api: Api, since: date) -> list[str] | None:
+    """Return the people other than the owner who opened an issue or PR.
+
+    Bots (Dependabot and others) are not people and are not counted.
+    """
+    people: set[str] = set()
+    for kind in ("issue", "pull-request"):
+        query = f"repo:{REPO} is:{kind} created:>={since.isoformat()} -author:{OWNER}"
+        found = api("search/issues", {"q": query, "per_page": "100"})
+        items = _get(found, "items")
+        if not isinstance(items, list):
+            return None
+        for item in items:
+            user = _get(item, "user")
+            if _get(user, "type") == "User" and _get(user, "login"):
+                login = str(_get(user, "login"))
+                if login.lower() != OWNER.lower():
+                    people.add(login)
+    return sorted(people)
 
 
 def _get(data: Any, *keys: str) -> Any:
@@ -145,24 +240,37 @@ def _get(data: Any, *keys: str) -> Any:
 def public_numbers(
     api: Api = gh_api,
     pause: Callable[[float], None] = time.sleep,
-    pypi: Callable[[], int | None] = pypi_last_month,
+    pypi: PyPI = pypistats_system,
+    today: date | None = None,
 ) -> dict[str, Any]:
     """Collect the public numbers. A number that cannot be read is ``None``."""
+    today = today or date.today()
     repo = api(f"repos/{REPO}", {})
     release = api(f"repos/{REPO}/releases/latest", {})
-    assets = _get(release, "assets")
+    code_rows = pypi(PYPI_CODE_PACKAGE)
+    pause(PYPI_PAUSE_SECONDS)
+    name_rows = pypi(PYPI_NAME_PACKAGE)
+    week = pypi_counts(code_rows, 7)
+    month = pypi_counts(code_rows, 30)
+    name_month = pypi_counts(name_rows, 30)
+    seen = month and month["installs"] + month["no_installer"]
     numbers: dict[str, Any] = {
         "stars": _get(repo, "stargazers_count"),
         "forks": _get(repo, "forks_count"),
         "visitors_14_days": _get(api(f"repos/{REPO}/traffic/views", {}), "uniques"),
-        "cloners_14_days": _get(api(f"repos/{REPO}/traffic/clones", {}), "uniques"),
-        "latest_release": _get(release, "tag_name"),
-        "latest_release_downloads": sum(
-            a.get("download_count", 0) for a in assets if isinstance(a, dict)
+        "people_who_opened_an_issue_or_pr_30_days": people_who_opened(
+            api, date.fromordinal(today.toordinal() - 30)
+        ),
+        "pypi_installs_7_days": week and week["installs"],
+        "pypi_installs_30_days": month and month["installs"],
+        "pypi_installs_30_days_with_the_name_credenzo": name_month
+        and name_month["installs"],
+        "pypi_downloads_30_days_with_no_installer_percent": round(
+            100 * month["no_installer"] / seen
         )
-        if isinstance(assets, list)
+        if month and seen
         else None,
-        "pypi_downloads_last_month": pypi(),
+        "latest_release": _get(release, "tag_name"),
     }
     for name, queries in SEARCHES.items():
         repos: set[str] | None = set()
@@ -191,13 +299,20 @@ def render(numbers: dict[str, Any], decision: dict[str, Any]) -> str:
         "|---|---|",
     ]
     for name, value in numbers.items():
-        label = name.replace("_", " ")
+        if name not in LABELS:
+            continue
+        label = LABELS[name]
         if isinstance(value, list):
             shown = f"{len(value)}" + (f" ({', '.join(value)})" if value else "")
         else:
             shown = "not read" if value is None else str(value)
         lines.append(f"| {label} | {shown} |")
     lines += [
+        "",
+        "Left out because they do not show use by people: PyPI downloads"
+        " with no installer (bots, scanners, mirrors), repository clones and"
+        " release downloads (this repository's CI makes part of them). PyPI"
+        " installs count both names once and include CI runs of users.",
         "",
         "Not measured: guard blocks, and locks or checks in private"
         " repositories. Credenzo sends no telemetry.",
