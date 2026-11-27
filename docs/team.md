@@ -114,6 +114,8 @@ the lock.
       - uses: adudley78/credenzo/team@v0.36.3
         with:
           connect: "true"
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
 ```
 
 Record the tools first with `credenzo lock --connect`. The release binary
@@ -121,12 +123,20 @@ cannot connect, so this job installs the package. `connect` runs the servers
 that the lock approves; read "Tool definitions" in [lock.md](lock.md) before
 you turn it on.
 
+A server that takes its key from `${API_KEY}` in `.mcp.json` gets the value
+from the job's `env:`, as it does from your shell in Claude Code
+(`lock --verify --connect --expand-env`; credenzo 0.37.0 or later). Put each
+key in a secret. Only the servers that the lock approves, with no change, are
+started. The action's own token and webhook URL never reach the check. Set
+`expand-env: "false"` to give each server the text `${API_KEY}` instead.
+
 ## Inputs and outputs
 
 | Input | Default | Meaning |
 |---|---|---|
 | `path` | `.` | Project root that holds `mcp-lock.json` |
 | `connect` | `false` | Also compare each server's live tools (`lock --verify --connect`) |
+| `expand-env` | `true` | With `connect`: fill `${VAR}` in each locked server's launch from the job environment (`--expand-env`) |
 | `resolve` | `false` | Also compare floating package versions with the registry (`--resolve`) |
 | `alert-issue` | `true` | Keep the drift issue. Needs `issues: write`. |
 | `alert-webhook` | none | HTTPS URL that gets `{"text": "..."}` |
@@ -234,7 +244,9 @@ card again.
   the issue has the label `credenzo-lock-drift`.
 - A server that does not start in a `connect` run is "not verified". That
   opens the issue, and the next run that passes closes it. A server that
-  fails now and then gives an issue now and then.
+  fails now and then gives an issue now and then. When the reason is a key,
+  the run log says `(--expand-env: not set: NAME)`: add `NAME` to the job's
+  `env:`.
 - A tool that writes the date of the day into its text is not drift, when
   the lock was written with Credenzo 0.36.0 or later
   ([lock.md](lock.md#tool-definitions---connect)). Other text that a server

@@ -321,6 +321,18 @@ def lock(
             "Never stored or logged."
         ),
     ),
+    expand_env: bool = typer.Option(  # noqa: B008
+        False,
+        "--expand-env",
+        help=(
+            "With --connect: fill ${VAR} and ${VAR:-default} in each stdio "
+            "server's command, args and env from this environment before it "
+            "starts, as Claude Code does. Use it where you chose the "
+            "environment, for example in CI with the server's key in a "
+            "secret. Off by default: without it a server gets no host "
+            "variable that the config names."
+        ),
+    ),
     identify_as: str | None = typer.Option(  # noqa: B008
         None,
         "--identify-as",
@@ -395,8 +407,6 @@ def lock(
         if not connect:
             console.print("[red]Error:[/red] --identify-as needs --connect.")
             raise typer.Exit(2)
-        from mcp_audit import mcp_client as _mcp_client  # noqa: PLC0415
-
         try:
             _mcp_client.set_connect_identity(identify_as)
         except ValueError as exc:
@@ -405,6 +415,11 @@ def lock(
     if allow_copies and not connect:
         console.print("[red]Error:[/red] --allow-copies needs --connect.")
         raise typer.Exit(2)
+    if expand_env and not connect:
+        console.print("[red]Error:[/red] --expand-env needs --connect.")
+        raise typer.Exit(2)
+    # Set on each run, so one CLI call never inherits another's setting.
+    _mcp_client.set_expand_env(expand_env)
     if save_tool_text and verify:
         console.print(
             "[red]Error:[/red] --save-tool-text writes; it cannot be used "

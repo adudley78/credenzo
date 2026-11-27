@@ -945,3 +945,89 @@ def test_the_offer_file() -> None:
     live = offer["live_since"] is not None
     assert (offer["checkout_url"] is not None) == live
     assert (offer["payment_link_id"] is not None) == live
+
+
+# --- servers that take a key from ${VAR} (finding of 2026-11-27) -----------
+
+
+class _Done:
+    def __init__(self, stdout: str = "", returncode: int = 0) -> None:
+        self.stdout, self.stderr, self.returncode = stdout, "", returncode
+
+
+def test_connect_passes_expand_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], **kw: object) -> _Done:
+        seen.append(args)
+        return _Done()
+
+    monkeypatch.setattr(team.subprocess, "run", fake_run)
+    team.run_verify("credenzo", ".", True, False, True)
+    team.run_verify("credenzo", ".", True, False, False)
+    team.run_verify("credenzo", ".", False, False, True)
+    assert "--expand-env" in seen[0]
+    assert "--expand-env" not in seen[1]
+    assert "--expand-env" not in seen[2]  # only with --connect
+
+
+def test_the_check_never_gets_the_token_or_the_webhook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INPUT_GITHUB_TOKEN", "ghs_secret")
+    monkeypatch.setenv("INPUT_ALERT_WEBHOOK", "https://hooks.example/secret")
+    monkeypatch.setenv("DEMO_API_KEY", "for-the-server")
+    envs: list[dict] = []
+
+    def fake_run(args: list[str], **kw: object) -> _Done:
+        envs.append(kw["env"])  # type: ignore[arg-type]
+        return _Done()
+
+    monkeypatch.setattr(team.subprocess, "run", fake_run)
+    team.run_verify("credenzo", ".", True, False, True)
+    team.supports_expand_env("credenzo")
+    for env in envs:
+        assert "INPUT_GITHUB_TOKEN" not in env
+        assert "INPUT_ALERT_WEBHOOK" not in env
+        assert env["DEMO_API_KEY"] == "for-the-server"
+
+
+@needs_cli
+def test_the_installed_command_has_expand_env() -> None:
+    assert team.supports_expand_env(str(CREDENZO))
+
+
+def test_an_old_command_gets_a_warning_and_no_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[tuple] = []
+    monkeypatch.setattr(team, "supports_expand_env", lambda command: False)
+    monkeypatch.setattr(team.shutil, "which", lambda name: "/usr/bin/credenzo")
+    monkeypatch.setattr(team, "run_verify", lambda *a: calls.append(a) or (0, None))
+    monkeypatch.setattr(team, "_alerts", lambda *a: None)
+    code = team.main({"INPUT_CONNECT": "true"}, Net())
+    assert code == 0
+    assert calls[0][4] is False
+    assert "added in 0.37.0" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("inputs", "expected"),
+    [
+        ({"INPUT_CONNECT": "true"}, True),  # on by default with connect
+        ({"INPUT_CONNECT": "true", "INPUT_EXPAND_ENV": "false"}, False),
+        ({"INPUT_CONNECT": "false"}, False),
+    ],
+)
+def test_the_expand_env_input(
+    monkeypatch: pytest.MonkeyPatch, inputs: dict[str, str], expected: bool
+) -> None:
+    calls: list[tuple] = []
+    monkeypatch.setattr(team, "supports_expand_env", lambda command: True)
+    monkeypatch.setattr(team.shutil, "which", lambda name: "/usr/bin/credenzo")
+    monkeypatch.setattr(team, "run_verify", lambda *a: calls.append(a) or (0, None))
+    monkeypatch.setattr(team, "_alerts", lambda *a: None)
+    team.main(inputs, Net())
+    assert calls[0][4] is expected

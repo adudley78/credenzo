@@ -515,18 +515,59 @@ def send_webhook(url: str, text: str, fetch: Fetch = _fetch) -> bool:
 # --- the check -------------------------------------------------------------
 
 
+#: Variables of this step that the check never gets: the action's own token
+#: and webhook URL. With ``--expand-env`` a config could otherwise name them.
+WITHHELD_FROM_CHECK = frozenset({"INPUT_GITHUB_TOKEN", "INPUT_ALERT_WEBHOOK"})
+
+
+def check_environment(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Return the environment of the check: this one, less the action's secrets."""
+    source = os.environ if environ is None else environ
+    return {k: v for k, v in source.items() if k not in WITHHELD_FROM_CHECK}
+
+
+def supports_expand_env(command: str) -> bool:
+    """Return whether this ``credenzo`` has ``lock --expand-env`` (0.37.0+)."""
+    environ = check_environment()
+    environ.update({"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"})
+    try:
+        done = subprocess.run(  # noqa: S603
+            [command, "lock", "--help"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=120,
+            env=environ,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return "--expand-env" in done.stdout
+
+
 def run_verify(
-    command: str, root: str, connect: bool, resolve: bool
+    command: str,
+    root: str,
+    connect: bool,
+    resolve: bool,
+    expand_env: bool = False,
 ) -> tuple[int, dict[str, Any] | None]:
     """Run ``credenzo lock --verify`` and return ``(exit code, JSON document)``.
 
     The document is ``None`` when there is no lock file (exit code 0) or when
     the command stopped before it wrote one (exit code 2). A command that
     runs longer than ``VERIFY_TIMEOUT_SECONDS`` is stopped: exit code 2.
+
+    With *connect* and *expand_env*, the check fills ``${VAR}`` in each
+    locked server's launch from this environment (``--expand-env``), so a
+    server that takes its key from a CI secret starts as it does for the
+    agent. Only servers that the lock approves, unchanged, are started.
     """
     args = [command, "lock", root, "--verify", "--if-present", "--format", "json"]
     if connect:
         args.append("--connect")
+        if expand_env:
+            args.append("--expand-env")
     if resolve:
         args.append("--resolve")
     # Bytes are decoded as UTF-8 with replacement: on a Windows runner the
@@ -539,6 +580,7 @@ def run_verify(
             errors="replace",
             check=False,
             timeout=VERIFY_TIMEOUT_SECONDS,
+            env=check_environment(),
         )
     except subprocess.TimeoutExpired:
         print(
@@ -589,11 +631,22 @@ def main(env: dict[str, str] | None = None, fetch: Fetch = _fetch) -> int:
         )
         return 2
 
+    connect = _truthy(env.get("INPUT_CONNECT"))
+    expand_env = connect and _truthy(env.get("INPUT_EXPAND_ENV", "true"))
+    if expand_env and not supports_expand_env(command):
+        print(
+            "::warning title=Credenzo Team::This `credenzo` has no `--expand-env`"
+            " (added in 0.37.0). A server that takes a key from ${VAR} in its"
+            " config does not start, and the check reports it as not verified."
+            " Install credenzo 0.37.0 or later."
+        )
+        expand_env = False
     exit_code, payload = run_verify(
         command,
         env.get("INPUT_PATH") or ".",
-        _truthy(env.get("INPUT_CONNECT")),
+        connect,
         _truthy(env.get("INPUT_RESOLVE")),
+        expand_env,
     )
     try:
         _alerts(env, fetch, exit_code, payload)

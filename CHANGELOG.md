@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`lock --connect --expand-env` starts a server that takes its key from `${VAR}`.** Claude Code fills `${VAR}` and `${VAR:-default}` in a server's `command`, `args` and `env` in `.mcp.json`. `--connect` did not, so a server that checks its key at start-up did not start, and `lock --verify --connect` reported it as not verified even when the key was in the environment. With `--expand-env`, `--connect` fills each reference from its own environment by Claude Code's rules (an empty value counts as set; a variable that is not set and has no default stays as text and is named in the reason). Only the variables that the config names reach the server, and each value is redacted from the server's output. The flag is off by default, because `lock --connect` on a repository that someone else wrote would let its config name any variable of your shell. Remote servers do not change. See "Keys from the environment" in `docs/lock.md`.
+
+### Fixed
+
+- **Credenzo Team: the scheduled `connect` check no longer alerts every night for a server that takes its key from a secret.** The action passes `--expand-env` when `connect` is `true` (new input `expand-env`, default `true`), so the server gets the key from the job's `env:`. The action's own token and webhook URL are removed from the environment of the check. With a `credenzo` older than 0.37.0 the action prints a warning and runs the check without the flag. No customer was affected: the paid alerts had no subscriber yet.
+
 ### Documentation
 
 - **Example workflows use the 0.36.3 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.2 to v0.36.3.

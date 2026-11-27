@@ -418,6 +418,7 @@ lock time) — never confirmed against the registry
 | `--save-tool-text` | off | With `--connect`: also write the tool definitions to `mcp-lock.tools.json` beside the lock. `mcp-lock.json` is unchanged. See [Saved tool text](#saved-tool-text---save-tool-text). |
 | `--allow-copies` | off | With `--connect`: also record a new tool that carries the description of a tool of another server that the lock held before. See [A copy is not approved](#a-copy-is-not-approved-story-0174). |
 | `--tool-text-path` | `<lock dir>/mcp-lock.tools.json` | Where the tool-text file is written (with `--save-tool-text`) or read (with `--verify --connect`) |
+| `--expand-env` | off | With `--connect`: fill `${VAR}` and `${VAR:-default}` in each stdio server's `command`, `args` and `env` from this environment before it starts, as Claude Code does. See [Keys from the environment](#keys-from-the-environment---expand-env). |
 | `--connect-token` | none | Bearer token sent to remote (SSE/HTTP) servers during `--connect`. Never stored or logged. |
 | `--identify-as NAME[@VERSION]` | per client | With `--connect`: the client name given to each server in the MCP handshake. By default a Claude Code server is asked as Claude Code and any other with the MCP SDK's default name. See [live-connection.md](live-connection.md). |
 | `--include-user` | off | Also lock user-global configs (for dotfiles repositories) |
@@ -575,6 +576,39 @@ same `SAFE_ENV_VARS` as `scan --connect`), plus the server's own `env` from its 
 servers that need a bearer token take `--connect-token`. The GitHub Action's `lock-verify` input
 does not pass `--connect`; whether CI should start MCP servers is your call, made explicitly in
 your own workflow step.
+
+### Keys from the environment (`--expand-env`)
+
+A server config often takes its key from the environment, so that no secret is in the repository:
+
+```json
+"api": {"command": "npx", "args": ["-y", "api-mcp@1.2.0"], "env": {"API_KEY": "${API_KEY}"}}
+```
+
+Claude Code fills `${VAR}` and `${VAR:-default}` in a server's `command`, `args` and `env`
+([Claude Code docs](https://code.claude.com/docs/en/mcp-configuration), "Environment variable
+expansion in .mcp.json"). Without `--expand-env`, `--connect` gives the server the text `${API_KEY}`.
+A server that checks its key at start-up then exits, and `lock --verify --connect` reports it as not
+verified (exit 1).
+
+With `--expand-env`, `--connect` fills each reference from its own environment first, by the rules
+of Claude Code:
+
+- `${VAR}` becomes the value of `VAR`. A variable set to the empty string counts as set.
+- `${VAR:-default}` becomes `default` when `VAR` is not set.
+- `${VAR}` with `VAR` not set and no default stays as it is. When that server does not start, the
+  reason names the variable: `(--expand-env: not set: API_KEY)`.
+
+Only the variables that the config names reach the server. Every value that `--expand-env` puts in
+is redacted from the server's output. The lock file holds the config text (`${API_KEY}`), never a
+value. Remote servers are not changed: they take `--connect-token`.
+
+`--expand-env` is off by default. Turn it on where you chose the environment, for example in CI with
+the key in a secret. Do not turn it on for a repository that you did not write: `lock --connect`
+starts every configured server, and with `--expand-env` a config can name any variable of your
+shell. `lock --verify --connect` starts only the servers that the lock approves, with no change to
+their command or arguments. The lock records the names of a server's `env` keys, not their values,
+so a change from `${API_KEY}` to `${OTHER}` under the same key is not drift.
 
 ---
 
