@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-27
+
+**Upgrade note.** `lock` has a new flag, `--expand-env`, for use with `--connect`. It is off by default, so `lock`, `lock --connect` and `lock --verify --connect` behave as before unless you pass it. The Credenzo Team action passes it when `connect` is `true`; set its new input `expand-env: "false"` to keep the old behaviour. With `--expand-env`, a server that put a filled value into its tool text gets no new entry in `mcp-lock.tools.json`. JSON output, SARIF output and the lock file format do not change.
+
 ### Added
 
 - **`lock --connect --expand-env` starts a server that takes its key from `${VAR}`.** Claude Code fills `${VAR}` and `${VAR:-default}` in a server's `command`, `args` and `env` in `.mcp.json`. `--connect` did not, so a server that checks its key at start-up did not start, and `lock --verify --connect` reported it as not verified even when the key was in the environment. With `--expand-env`, `--connect` fills each reference from its own environment by Claude Code's rules (an empty value counts as set; a variable that is not set and has no default stays as text and is named in the reason). Only the variables that the config names reach the server. Each value of 8 characters or more is redacted from the server's stderr and errors and from what `lock --verify --connect` shows, and a server whose tool text holds such a value is left out of `mcp-lock.tools.json`, with a warning. The flag is off by default, because `lock --connect` on a repository that someone else wrote would let its config name any variable of your shell. Remote servers do not change. See "Keys from the environment" in `docs/lock.md`.
