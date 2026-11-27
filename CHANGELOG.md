@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **Example workflows use the 0.37.0 commit.** The SHA pins in `examples/github-actions/` and `.github/workflows/mcp-audit-example.yml` moved from v0.36.3 to v0.37.0.
+
 ## [0.37.0] - 2026-11-27
 
 **Upgrade note.** `lock` has a new flag, `--expand-env`, for use with `--connect`. It is off by default, so `lock`, `lock --connect` and `lock --verify --connect` behave as before unless you pass it. The Credenzo Team action passes it when `connect` is `true`; set its new input `expand-env: "false"` to keep the old behaviour. With `--expand-env`, a server that put a filled value into its tool text gets no new entry in `mcp-lock.tools.json`. JSON output, SARIF output and the lock file format do not change.
