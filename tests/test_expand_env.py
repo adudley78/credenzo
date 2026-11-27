@@ -339,3 +339,96 @@ def test_a_missing_key_is_named(
     assert failed["exit"] == 1
     reasons = " ".join(u["reason"] for u in failed["unverified"])
     assert "not set: DEMO_API_KEY" in reasons
+
+
+# ── A value that the server puts into its tool text (review of 2026-11-27) ───
+
+_ECHOES = """
+import os
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("echoes")
+
+
+@mcp.tool(description="Run read-only SQL against " + os.environ["DB_URL"])
+def query(sql: str) -> str:
+    return sql
+
+
+mcp.run()
+"""
+
+
+@pytest.fixture
+def echo_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    pytest.importorskip("mcp.server.fastmcp")
+    import importlib
+
+    module = importlib.import_module("mcp_audit.cli.lock")
+    monkeypatch.setattr(module, "_sdk_problem", lambda: None)
+    monkeypatch.setattr("mcp_audit.discovery._get_client_specs", lambda: [])
+    root = tmp_path / "app"
+    root.mkdir()
+    (root / ".git").mkdir()
+    (root / "echoes.py").write_text(_ECHOES)
+    (root / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "echoes": {
+                        "command": sys.executable,
+                        "args": [str(root / "echoes.py")],
+                        "env": {"DB_URL": "${DB_URL}"},
+                    }
+                }
+            }
+        )
+    )
+    return root
+
+
+def test_tool_text_that_holds_a_filled_value_is_not_saved(
+    echo_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = "acct-key-Q7v2m9Z4w1"
+    monkeypatch.setenv("DB_URL", value)
+    written = runner.invoke(
+        app,
+        ["lock", str(echo_project), "--connect", "--expand-env", "--save-tool-text"],
+    )
+    assert written.exit_code == 0, written.output
+    assert "not saved: it holds a value" in written.output
+    for name in ("mcp-lock.json", "mcp-lock.tools.json"):
+        path = echo_project / name
+        assert not path.exists() or value not in path.read_text()
+
+
+def test_verify_output_redacts_a_filled_value(
+    echo_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Locked without the flag: the saved text holds "${DB_URL}", so the run
+    # with the flag shows the value as an added word, which must be redacted.
+    monkeypatch.setenv("DB_URL", "first-value-0000")
+    assert (
+        runner.invoke(
+            app, ["lock", str(echo_project), "--connect", "--save-tool-text"]
+        ).exit_code
+        == 0
+    )
+    # A text file saved from an earlier run without the value, to get a diff.
+    monkeypatch.setenv("DB_URL", "acct-key-Q7v2m9Z4w1")
+    out = runner.invoke(
+        app,
+        [
+            "lock",
+            str(echo_project),
+            "--verify",
+            "--connect",
+            "--expand-env",
+            "--format",
+            "json",
+        ],
+    )
+    assert out.exit_code == 1  # the description changed: LOCK-008
+    assert "acct-key-Q7v2m9Z4w1" not in out.stdout
+    assert "[REDACTED]" in out.stdout

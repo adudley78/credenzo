@@ -599,16 +599,33 @@ of Claude Code:
 - `${VAR}` with `VAR` not set and no default stays as it is. When that server does not start, the
   reason names the variable: `(--expand-env: not set: API_KEY)`.
 
-Only the variables that the config names reach the server. Every value that `--expand-env` puts in
-is redacted from the server's output. The lock file holds the config text (`${API_KEY}`), never a
-value. Remote servers are not changed: they take `--connect-token`.
+Only the variables that the config names reach the server. The lock file holds the config text
+(`${API_KEY}`), never a value. Remote servers are not changed: they take `--connect-token`.
+`scan --connect` does not expand.
+
+A server can put a value that it got into its own tool text (for example "Run SQL against
+postgres://app:pw@db/prod"). So, for each value of 8 characters or more that `--expand-env` put in:
+
+- it is redacted from the server's stderr and error text, and from the diffs and findings that
+  `lock --verify --connect` shows;
+- a server whose tool text holds it gets no entry in `mcp-lock.tools.json` (`--save-tool-text`),
+  with a warning. The saved text must match the lock's digest, so it cannot be redacted.
+
+A value of fewer than 8 characters is not redacted. The digests in `mcp-lock.json` hold no text.
+
+If a server's tool text holds a value that differs between machines (a base URL, an account ID),
+the lock written on a laptop and the check in CI see different tool text: `LOCK-007` or `LOCK-008`
+in each run. Write the lock where the check runs, with the same values.
 
 `--expand-env` is off by default. Turn it on where you chose the environment, for example in CI with
 the key in a secret. Do not turn it on for a repository that you did not write: `lock --connect`
 starts every configured server, and with `--expand-env` a config can name any variable of your
-shell. `lock --verify --connect` starts only the servers that the lock approves, with no change to
-their command or arguments. The lock records the names of a server's `env` keys, not their values,
-so a change from `${API_KEY}` to `${OTHER}` under the same key is not drift.
+shell. `lock --verify --connect` starts only the servers that the lock approves and that show no
+`LOCK-001` drift. Two changes are not drift: the value of an `env` key (the lock records the key
+names only), and a credential-shaped argument such as `--api-key=...`, which the lock compares in
+redacted form. So a change from `${API_KEY}` to `${OTHER}` in either place passes. A person who can
+commit can change the workflow too, so this gives no new path to a secret; review such a change in
+the pull request.
 
 ---
 

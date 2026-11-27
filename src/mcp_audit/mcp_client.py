@@ -317,6 +317,41 @@ def _expanded_launch(
     return command, args, env, values, missing
 
 
+def filled_values(
+    server: ServerConfig, environ: Mapping[str, str] | None = None
+) -> list[str]:
+    """Return the values ``--expand-env`` puts into *server*'s launch.
+
+    Only values of ``_MIN_REDACTED_ENV_VALUE`` characters or more: shorter
+    ones ("eu", "1") would blank out ordinary words. Empty when
+    ``--expand-env`` is off. The caller redacts them from what it shows and
+    keeps them out of what it stores.
+    """
+    if not _expand_env or server.transport != TransportType.STDIO:
+        return []
+    _, _, _, values, _ = _expanded_launch(
+        server, os.environ if environ is None else environ
+    )
+    return [v for v in values if len(v) >= _MIN_REDACTED_ENV_VALUE]
+
+
+def redact_values(obj: Any, values: list[str]) -> Any:
+    """Return *obj* (str, list, tuple or dict, nested) with *values* redacted."""
+    if not values:
+        return obj
+    if isinstance(obj, str):
+        for value in sorted(set(values), key=len, reverse=True):
+            obj = obj.replace(value, _REDACTED)
+        return obj
+    if isinstance(obj, list):
+        return [redact_values(v, values) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(redact_values(v, values) for v in obj)
+    if isinstance(obj, dict):
+        return {k: redact_values(v, values) for k, v in obj.items()}
+    return obj
+
+
 def connect_identity(server: ServerConfig) -> dict[str, str] | None:
     """Return the ``clientInfo`` to connect to *server* with, or ``None``.
 

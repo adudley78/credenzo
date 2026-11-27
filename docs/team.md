@@ -127,8 +127,15 @@ A server that takes its key from `${API_KEY}` in `.mcp.json` gets the value
 from the job's `env:`, as it does from your shell in Claude Code
 (`lock --verify --connect --expand-env`; credenzo 0.37.0 or later). Put each
 key in a secret. Only the servers that the lock approves, with no change, are
-started. The action's own token and webhook URL never reach the check. Set
-`expand-env: "false"` to give each server the text `${API_KEY}` instead.
+started. The action removes its own token and webhook URL from the
+environment of the check. A started server runs as the same user as the job,
+so do not count on that as a wall against a server. Set `expand-env: "false"`
+to give each server the text `${API_KEY}` instead.
+
+Run `connect` on `push`, `schedule` or `workflow_dispatch`. Never run it on
+`pull_request_target`: there the job has your secrets, and a pull request
+from a fork can change the lock and the config that say which servers start.
+On `pull_request` from a fork, GitHub gives the job no secrets.
 
 ## Inputs and outputs
 
@@ -244,9 +251,10 @@ card again.
   the issue has the label `credenzo-lock-drift`.
 - A server that does not start in a `connect` run is "not verified". That
   opens the issue, and the next run that passes closes it. A server that
-  fails now and then gives an issue now and then. When the reason is a key,
-  the run log says `(--expand-env: not set: NAME)`: add `NAME` to the job's
-  `env:`.
+  fails now and then gives an issue now and then. When the reason is a
+  variable that is not set, the run log has a warning that names the server
+  and the variable (`did not start: not set: NAME`): add `NAME` to the job's
+  `env:`. The issue and the webhook message name the server only.
 - A tool that writes the date of the day into its text is not drift, when
   the lock was written with Credenzo 0.36.0 or later
   ([lock.md](lock.md#tool-definitions---connect)). Other text that a server

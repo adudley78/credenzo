@@ -69,6 +69,8 @@ HTTP_TIMEOUT_SECONDS = 15
 #: The longest time that `credenzo lock --verify` gets. With `connect` it
 #: starts each locked server.
 VERIFY_TIMEOUT_SECONDS = 1800
+#: Longest wait for ``credenzo lock --help`` (the ``--expand-env`` probe).
+PROBE_TIMEOUT_SECONDS = 120
 #: The account that writes an issue with the workflow token.
 ACTIONS_LOGIN = "github-actions[bot]"
 
@@ -194,6 +196,31 @@ def unverified_of(payload: dict[str, Any] | None) -> list[str]:
         if isinstance(item, dict):
             kind = clean_name(item.get("kind"))
             lines.add(f"not verified ({kind}): `{clean_name(item.get('name'))}`")
+    return sorted(lines)
+
+
+_NAME = r"[A-Za-z_][A-Za-z0-9_]{0,127}"
+_NOT_SET = re.compile(rf"\(--expand-env: not set: ({_NAME}(?:, {_NAME}){{0,31}})\)")
+
+
+def not_set_of(payload: dict[str, Any] | None) -> list[str]:
+    """Return one line for each server that did not start for want of a variable.
+
+    Only the variable names are read from the reason: the pattern accepts
+    identifier characters and nothing else, so no text that a server printed
+    can pass. The line goes to the run log, never to the issue or webhook.
+    """
+    items = (payload or {}).get("unverified")
+    lines: set[str] = set()
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("reason"), str):
+            continue
+        found = _NOT_SET.search(item["reason"])
+        if found:
+            lines.add(
+                f"`{clean_name(item.get('name'))}` did not start: not set:"
+                f" {found.group(1)}. Add it to the job's `env:` from a secret."
+            )
     return sorted(lines)
 
 
@@ -537,7 +564,7 @@ def supports_expand_env(command: str) -> bool:
             encoding="utf-8",
             errors="replace",
             check=False,
-            timeout=120,
+            timeout=PROBE_TIMEOUT_SECONDS,
             env=environ,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -635,9 +662,10 @@ def main(env: dict[str, str] | None = None, fetch: Fetch = _fetch) -> int:
     expand_env = connect and _truthy(env.get("INPUT_EXPAND_ENV", "true"))
     if expand_env and not supports_expand_env(command):
         print(
-            "::warning title=Credenzo Team::This `credenzo` has no `--expand-env`"
-            " (added in 0.37.0). A server that takes a key from ${VAR} in its"
-            " config does not start, and the check reports it as not verified."
+            "::warning title=Credenzo Team::This `credenzo` did not show"
+            " `--expand-env` in `lock --help` (the flag came in 0.37.0). The"
+            " check runs without it: a server that takes a key from ${VAR} in"
+            " its config does not start and is reported as not verified."
             " Install credenzo 0.37.0 or later."
         )
         expand_env = False
@@ -648,6 +676,8 @@ def main(env: dict[str, str] | None = None, fetch: Fetch = _fetch) -> int:
         _truthy(env.get("INPUT_RESOLVE")),
         expand_env,
     )
+    for line in not_set_of(payload):
+        print(f"::warning title=Credenzo Team::{line}")
     try:
         _alerts(env, fetch, exit_code, payload)
     except Exception as exc:  # noqa: BLE001 - an alert never changes the result

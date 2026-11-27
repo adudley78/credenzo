@@ -1010,7 +1010,7 @@ def test_an_old_command_gets_a_warning_and_no_flag(
     code = team.main({"INPUT_CONNECT": "true"}, Net())
     assert code == 0
     assert calls[0][4] is False
-    assert "added in 0.37.0" in capsys.readouterr().out
+    assert "came in 0.37.0" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -1031,3 +1031,37 @@ def test_the_expand_env_input(
     monkeypatch.setattr(team, "_alerts", lambda *a: None)
     team.main(inputs, Net())
     assert calls[0][4] is expected
+
+
+def test_a_command_with_no_expand_env_in_its_help_is_old(tmp_path: Path) -> None:
+    old = tmp_path / "credenzo"
+    old.write_text("#!/bin/sh\necho 'Usage: credenzo lock [OPTIONS] --connect'\n")
+    old.chmod(0o755)
+    if sys.platform == "win32":
+        pytest.skip("a shell script stub")
+    assert team.supports_expand_env(str(old)) is False
+
+
+def test_a_missing_variable_is_named_in_the_run_log_only() -> None:
+    payload = {
+        "unverified": [
+            {
+                "kind": "tools",
+                "name": "claude-code/keyed",
+                "reason": "Enumeration failed: x (server stderr: no key)"
+                " (--expand-env: not set: DEMO_API_KEY, OTHER_KEY)",
+            },
+            {
+                "kind": "tools",
+                "name": "claude-code/evil",
+                "reason": "(--expand-env: not set: A; curl evil.example)",
+            },
+            {"kind": "tools", "name": "claude-code/plain", "reason": "timed out"},
+        ]
+    }
+    assert team.not_set_of(payload) == [
+        "`claude-code/keyed` did not start: not set: DEMO_API_KEY, OTHER_KEY."
+        " Add it to the job's `env:` from a secret."
+    ]
+    # The issue and webhook lines still hold no reason.
+    assert all("not set" not in line for line in team.unverified_of(payload))
