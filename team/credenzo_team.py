@@ -69,6 +69,8 @@ HTTP_TIMEOUT_SECONDS = 15
 #: The longest time that `credenzo lock --verify` gets. With `connect` it
 #: starts each locked server.
 VERIFY_TIMEOUT_SECONDS = 1800
+#: Longest wait for ``credenzo lock --help`` (the ``--expand-env`` probe).
+PROBE_TIMEOUT_SECONDS = 120
 #: The account that writes an issue with the workflow token.
 ACTIONS_LOGIN = "github-actions[bot]"
 
@@ -194,6 +196,31 @@ def unverified_of(payload: dict[str, Any] | None) -> list[str]:
         if isinstance(item, dict):
             kind = clean_name(item.get("kind"))
             lines.add(f"not verified ({kind}): `{clean_name(item.get('name'))}`")
+    return sorted(lines)
+
+
+_NAME = r"[A-Za-z_][A-Za-z0-9_]{0,127}"
+_NOT_SET = re.compile(rf"\(--expand-env: not set: ({_NAME}(?:, {_NAME}){{0,31}})\)")
+
+
+def not_set_of(payload: dict[str, Any] | None) -> list[str]:
+    """Return one line for each server that did not start for want of a variable.
+
+    Only the variable names are read from the reason: the pattern accepts
+    identifier characters and nothing else, so no text that a server printed
+    can pass. The line goes to the run log, never to the issue or webhook.
+    """
+    items = (payload or {}).get("unverified")
+    lines: set[str] = set()
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("reason"), str):
+            continue
+        found = _NOT_SET.search(item["reason"])
+        if found:
+            lines.add(
+                f"`{clean_name(item.get('name'))}` did not start: not set:"
+                f" {found.group(1)}. Add it to the job's `env:` from a secret."
+            )
     return sorted(lines)
 
 
@@ -515,18 +542,59 @@ def send_webhook(url: str, text: str, fetch: Fetch = _fetch) -> bool:
 # --- the check -------------------------------------------------------------
 
 
+#: Variables of this step that the check never gets: the action's own token
+#: and webhook URL. With ``--expand-env`` a config could otherwise name them.
+WITHHELD_FROM_CHECK = frozenset({"INPUT_GITHUB_TOKEN", "INPUT_ALERT_WEBHOOK"})
+
+
+def check_environment(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Return the environment of the check: this one, less the action's secrets."""
+    source = os.environ if environ is None else environ
+    return {k: v for k, v in source.items() if k not in WITHHELD_FROM_CHECK}
+
+
+def supports_expand_env(command: str) -> bool:
+    """Return whether this ``credenzo`` has ``lock --expand-env`` (0.37.0+)."""
+    environ = check_environment()
+    environ.update({"COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"})
+    try:
+        done = subprocess.run(  # noqa: S603
+            [command, "lock", "--help"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=PROBE_TIMEOUT_SECONDS,
+            env=environ,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return "--expand-env" in done.stdout
+
+
 def run_verify(
-    command: str, root: str, connect: bool, resolve: bool
+    command: str,
+    root: str,
+    connect: bool,
+    resolve: bool,
+    expand_env: bool = False,
 ) -> tuple[int, dict[str, Any] | None]:
     """Run ``credenzo lock --verify`` and return ``(exit code, JSON document)``.
 
     The document is ``None`` when there is no lock file (exit code 0) or when
     the command stopped before it wrote one (exit code 2). A command that
     runs longer than ``VERIFY_TIMEOUT_SECONDS`` is stopped: exit code 2.
+
+    With *connect* and *expand_env*, the check fills ``${VAR}`` in each
+    locked server's launch from this environment (``--expand-env``), so a
+    server that takes its key from a CI secret starts as it does for the
+    agent. Only servers that the lock approves, unchanged, are started.
     """
     args = [command, "lock", root, "--verify", "--if-present", "--format", "json"]
     if connect:
         args.append("--connect")
+        if expand_env:
+            args.append("--expand-env")
     if resolve:
         args.append("--resolve")
     # Bytes are decoded as UTF-8 with replacement: on a Windows runner the
@@ -539,6 +607,7 @@ def run_verify(
             errors="replace",
             check=False,
             timeout=VERIFY_TIMEOUT_SECONDS,
+            env=check_environment(),
         )
     except subprocess.TimeoutExpired:
         print(
@@ -589,12 +658,26 @@ def main(env: dict[str, str] | None = None, fetch: Fetch = _fetch) -> int:
         )
         return 2
 
+    connect = _truthy(env.get("INPUT_CONNECT"))
+    expand_env = connect and _truthy(env.get("INPUT_EXPAND_ENV", "true"))
+    if expand_env and not supports_expand_env(command):
+        print(
+            "::warning title=Credenzo Team::This `credenzo` did not show"
+            " `--expand-env` in `lock --help` (the flag came in 0.37.0). The"
+            " check runs without it: a server that takes a key from ${VAR} in"
+            " its config does not start and is reported as not verified."
+            " Install credenzo 0.37.0 or later."
+        )
+        expand_env = False
     exit_code, payload = run_verify(
         command,
         env.get("INPUT_PATH") or ".",
-        _truthy(env.get("INPUT_CONNECT")),
+        connect,
         _truthy(env.get("INPUT_RESOLVE")),
+        expand_env,
     )
+    for line in not_set_of(payload):
+        print(f"::warning title=Credenzo Team::{line}")
     try:
         _alerts(env, fetch, exit_code, payload)
     except Exception as exc:  # noqa: BLE001 - an alert never changes the result

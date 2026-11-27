@@ -114,6 +114,8 @@ the lock.
       - uses: adudley78/credenzo/team@v0.36.3
         with:
           connect: "true"
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
 ```
 
 Record the tools first with `credenzo lock --connect`. The release binary
@@ -121,12 +123,30 @@ cannot connect, so this job installs the package. `connect` runs the servers
 that the lock approves; read "Tool definitions" in [lock.md](lock.md) before
 you turn it on.
 
+A server that takes its key from `${API_KEY}` in `.mcp.json` gets the value
+from the job's `env:`, as it does from your shell in Claude Code
+(`lock --verify --connect --expand-env`; credenzo 0.37.0 or later). Put each
+key in a secret. Only the servers that the lock approves, with no `LOCK-001`
+drift, are started ([what is not drift](lock.md#keys-from-the-environment---expand-env)).
+The action removes its own token and webhook URL from the
+environment of the check. A started server runs as the same user as the job,
+so do not count on that as a wall against a server. Set `expand-env: "false"`
+to give each server the text `${API_KEY}` instead.
+
+Run `connect` on `push`, `schedule` or `workflow_dispatch`. Never run it on
+`pull_request_target`: there the job has your secrets, and a pull request
+from a fork can change the lock and the config that say which servers start.
+On `pull_request` from a fork, GitHub gives the job no secrets, unless the
+repository turns on "Send secrets to workflows from fork pull requests"; then
+treat `pull_request` like `pull_request_target`.
+
 ## Inputs and outputs
 
 | Input | Default | Meaning |
 |---|---|---|
 | `path` | `.` | Project root that holds `mcp-lock.json` |
 | `connect` | `false` | Also compare each server's live tools (`lock --verify --connect`) |
+| `expand-env` | `true` | With `connect`: fill `${VAR}` in each locked server's launch from the job environment (`--expand-env`) |
 | `resolve` | `false` | Also compare floating package versions with the registry (`--resolve`) |
 | `alert-issue` | `true` | Keep the drift issue. Needs `issues: write`. |
 | `alert-webhook` | none | HTTPS URL that gets `{"text": "..."}` |
@@ -234,7 +254,10 @@ card again.
   the issue has the label `credenzo-lock-drift`.
 - A server that does not start in a `connect` run is "not verified". That
   opens the issue, and the next run that passes closes it. A server that
-  fails now and then gives an issue now and then.
+  fails now and then gives an issue now and then. When the reason is a
+  variable that is not set, the run log has a warning that names the server
+  and the variable (`did not start: not set: NAME`): add `NAME` to the job's
+  `env:`. The issue and the webhook message name the server only.
 - A tool that writes the date of the day into its text is not drift, when
   the lock was written with Credenzo 0.36.0 or later
   ([lock.md](lock.md#tool-definitions---connect)). Other text that a server

@@ -321,6 +321,18 @@ def lock(
             "Never stored or logged."
         ),
     ),
+    expand_env: bool = typer.Option(  # noqa: B008
+        False,
+        "--expand-env",
+        help=(
+            "With --connect: fill ${VAR} and ${VAR:-default} in each stdio "
+            "server's command, args and env from this environment before it "
+            "starts, as Claude Code does. Use it where you chose the "
+            "environment, for example in CI with the server's key in a "
+            "secret. Off by default: without it a server gets no host "
+            "variable that the config names."
+        ),
+    ),
     identify_as: str | None = typer.Option(  # noqa: B008
         None,
         "--identify-as",
@@ -395,8 +407,6 @@ def lock(
         if not connect:
             console.print("[red]Error:[/red] --identify-as needs --connect.")
             raise typer.Exit(2)
-        from mcp_audit import mcp_client as _mcp_client  # noqa: PLC0415
-
         try:
             _mcp_client.set_connect_identity(identify_as)
         except ValueError as exc:
@@ -405,6 +415,11 @@ def lock(
     if allow_copies and not connect:
         console.print("[red]Error:[/red] --allow-copies needs --connect.")
         raise typer.Exit(2)
+    if expand_env and not connect:
+        console.print("[red]Error:[/red] --expand-env needs --connect.")
+        raise typer.Exit(2)
+    # Set on each run, so one CLI call never inherits another's setting.
+    _mcp_client.set_expand_env(expand_env)
     if save_tool_text and verify:
         console.print(
             "[red]Error:[/red] --save-tool-text writes; it cannot be used "
@@ -537,7 +552,18 @@ def _run_write(
                 # entries; an entry with no tool left must not wipe the other.
                 record = {"tools": {**record["tools"], **earlier["tools"]}}
             tool_records[server_key(server)] = record
-            text_records[server_key(server)] = tool_text.server_text(enumeration.tools)
+            text = tool_text.server_text(enumeration.tools)
+            if _holds_filled_value(text, _mcp_client.filled_values(server)):
+                # The text must match the digest, so it cannot be redacted:
+                # it is not saved.  The digests hold no text.
+                console.print(
+                    f"[yellow]WARN[/yellow] tool text of "
+                    f"{escape(server_key(server))} not saved: it holds a value "
+                    "that --expand-env put in from the environment. An older "
+                    "text of this server, if any, stays in the file."
+                )
+                continue
+            text_records[server_key(server)] = text
 
     registry = None if offline else _load_registry(registry_path, console)
     try:
@@ -668,6 +694,37 @@ def _run_write(
         console.print(f"  {finding.evidence}")
 
 
+def _holds_filled_value(obj: object, values: list[str]) -> bool:
+    """Return whether any string in *obj* (nested) holds one of *values*."""
+    if not values:
+        return False
+    if isinstance(obj, str):
+        return any(v in obj for v in values)
+    if isinstance(obj, dict):
+        return any(_holds_filled_value(v, values) for v in obj.values())
+    if isinstance(obj, list | tuple):
+        return any(_holds_filled_value(v, values) for v in obj)
+    return False
+
+
+def _redact_filled(result, values: list[str]) -> None:  # noqa: ANN001
+    """Redact the values ``--expand-env`` put in from everything verify shows.
+
+    A server can put its key into its tool text; the diffs and findings show
+    that text. ``Finding`` is rebuilt from its redacted dump.
+    """
+    if not values:
+        return
+    red = _mcp_client.redact_values
+    result.findings = [
+        type(f).model_validate(red(f.model_dump(), values)) for f in result.findings
+    ]
+    result.tool_diffs = red(result.tool_diffs, values)
+    result.tool_text_notes = red(result.tool_text_notes, values)
+    for item in result.unverified:
+        item.reason = red(item.reason, values)
+
+
 def _write_tool_text(path: Path, records: dict[str, dict], keep: set[str]) -> None:
     """Write the tool-text companion file (``--save-tool-text``)."""
     existing, problem = tool_text.load(path)
@@ -771,6 +828,15 @@ def _run_verify(
         tool_text=saved_text,
         tool_text_problem=text_problem,
     )
+    if connect:
+        _redact_filled(
+            result,
+            [
+                v
+                for server in servers_to_connect(lock_path, servers)
+                for v in _mcp_client.filled_values(server)
+            ],
+        )
 
     if output_format == "json":
         payload = {

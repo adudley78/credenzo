@@ -36,6 +36,7 @@ import os
 import re
 import sys
 import tempfile
+from collections.abc import Mapping
 from typing import Any
 
 from mcp_audit.models import (
@@ -238,6 +239,119 @@ def set_connect_identity(spec: str | None) -> None:
     _identity_override = {"name": name, "version": version}
 
 
+#: ``--expand-env``: fill ``${VAR}`` in a stdio server's launch from the
+#: environment before it starts (see :func:`expand_env_refs`).
+_expand_env = False
+
+# The two forms Claude Code expands in ``.mcp.json``: ``${VAR}`` and
+# ``${VAR:-default}`` (https://code.claude.com/docs/en/mcp-configuration,
+# "Environment variable expansion in .mcp.json", read 2026-11-27).
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def set_expand_env(enabled: bool) -> None:
+    """Turn ``--expand-env`` on or off for every connection of this process."""
+    global _expand_env  # noqa: PLW0603 - one process-wide CLI setting
+    _expand_env = bool(enabled)
+
+
+def expand_env_refs(
+    text: str, environ: Mapping[str, str]
+) -> tuple[str, list[str], list[str]]:
+    """Expand ``${VAR}`` and ``${VAR:-default}`` in *text* as Claude Code does.
+
+    - ``${VAR}`` becomes the value of ``VAR``. A variable set to the empty
+      string counts as set.
+    - ``${VAR:-default}`` becomes the value of ``VAR`` when it is set, else
+      ``default``.
+    - ``${VAR}`` with ``VAR`` not set and no default stays as it is, and its
+      name is reported (Claude Code warns and keeps the text too).
+
+    One pass, left to right: a value that holds ``${...}`` is not expanded
+    again.
+
+    Args:
+        text: A command, an argument or an ``env`` value of a server.
+        environ: The environment to read (``os.environ`` in a real run).
+
+    Returns:
+        ``(expanded text, values put in from the environment, names not set)``.
+        The values are returned so that the caller can redact them.
+    """
+    values: list[str] = []
+    missing: list[str] = []
+
+    def _one(match: re.Match[str]) -> str:
+        name, default = match.group(1), match.group(2)
+        if name in environ:
+            values.append(environ[name])
+            return environ[name]
+        if default is not None:
+            return default
+        missing.append(name)
+        return match.group(0)
+
+    return _ENV_REF.sub(_one, text), values, missing
+
+
+def _expanded_launch(
+    server: ServerConfig, environ: Mapping[str, str]
+) -> tuple[str, list[str], dict[str, str], list[str], list[str]]:
+    """Return *server*'s command, args and env with ``${VAR}`` expanded.
+
+    Returns:
+        ``(command, args, env, values put in, names not set)``.
+    """
+    values: list[str] = []
+    missing: list[str] = []
+
+    def _x(text: str) -> str:
+        out, put, unset = expand_env_refs(text, environ)
+        values.extend(put)
+        missing.extend(n for n in unset if n not in missing)
+        return out
+
+    command = _x(server.command or "")
+    args = [_x(a) for a in server.args]
+    env = {k: _x(v) if isinstance(v, str) else v for k, v in server.env.items()}
+    return command, args, env, values, missing
+
+
+def filled_values(
+    server: ServerConfig, environ: Mapping[str, str] | None = None
+) -> list[str]:
+    """Return the values ``--expand-env`` puts into *server*'s launch.
+
+    Only values of ``_MIN_REDACTED_ENV_VALUE`` characters or more: shorter
+    ones ("eu", "1") would blank out ordinary words. Empty when
+    ``--expand-env`` is off. The caller redacts them from what it shows and
+    keeps them out of what it stores.
+    """
+    if not _expand_env or server.transport != TransportType.STDIO:
+        return []
+    _, _, _, values, _ = _expanded_launch(
+        server, os.environ if environ is None else environ
+    )
+    return [v for v in values if len(v) >= _MIN_REDACTED_ENV_VALUE]
+
+
+def redact_values(obj: Any, values: list[str]) -> Any:
+    """Return *obj* (str, list, tuple or dict, nested) with *values* redacted."""
+    if not values:
+        return obj
+    if isinstance(obj, str):
+        for value in sorted(set(values), key=len, reverse=True):
+            obj = obj.replace(value, _REDACTED)
+        return obj
+    if isinstance(obj, list):
+        return [redact_values(v, values) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(redact_values(v, values) for v in obj)
+    if isinstance(obj, dict):
+        return {k: redact_values(v, values) for k, v in obj.items()}
+    return obj
+
+
 def connect_identity(server: ServerConfig) -> dict[str, str] | None:
     """Return the ``clientInfo`` to connect to *server* with, or ``None``.
 
@@ -326,9 +440,23 @@ async def _enumerate_stdio(
 
     # Build a minimal env from the allowlist, then overlay server-specific vars.
     # This prevents leaking the user's full environment to untrusted servers.
+    # With --expand-env, only the variables that the config names reach the
+    # server (as values of its own command, args and env), as with the agent.
+    command, args, server_env = server.command, list(server.args), dict(server.env)
+    put_in: list[str] = []
+    not_set: list[str] = []
+    if _expand_env:
+        command, args, server_env, put_in, not_set = _expanded_launch(
+            server, os.environ
+        )
     env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_VARS}
-    env.update(server.env)
-    params = params_cls(command=server.command, args=server.args, env=env)
+    env.update(server_env)
+    launch = server.model_copy(
+        update={"command": command, "args": args, "env": server_env}
+    )
+    params = params_cls(command=command, args=args, env=env)
+    # Every value from the environment is redacted from what the server says.
+    secrets = [*server_env.values(), *put_in]
 
     # Capture stderr to a real temporary file so:
     # (a) it never leaks to the user's terminal, and
@@ -341,7 +469,7 @@ async def _enumerate_stdio(
     with tempfile.TemporaryFile(mode="w+b") as stderr_buf:
         try:
             result = await _run_stdio_session(
-                server,
+                launch,
                 env,
                 params,
                 params_cls,
@@ -362,8 +490,8 @@ async def _enumerate_stdio(
     captured_stderr = (
         redact_server_text(
             raw_stderr.decode("utf-8", errors="replace").strip(),
-            server.env.values(),
-            server.args,
+            secrets,
+            args,
         )
         if raw_stderr
         else None
@@ -371,9 +499,7 @@ async def _enumerate_stdio(
 
     if failure is not None or result is None:
         reason = (
-            redact_server_text(
-                describe_exception(failure), server.env.values(), server.args
-            )
+            redact_server_text(describe_exception(failure), secrets, args)
             if failure is not None
             else "no result"
         )
@@ -381,6 +507,10 @@ async def _enumerate_stdio(
         last = _last_line(captured_stderr)
         if last:
             error += f" (server stderr: {last})"
+        if not_set:
+            # Names only: they match [A-Za-z_][A-Za-z0-9_]*, so they are safe
+            # to print.  This is the usual reason a keyed server fails in CI.
+            error += f" (--expand-env: not set: {', '.join(not_set)})"
         return ServerEnumeration(error=error, server_stderr=captured_stderr or None)
 
     return ServerEnumeration(

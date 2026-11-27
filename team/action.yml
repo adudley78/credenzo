@@ -24,6 +24,16 @@ inputs:
       the release binary cannot connect.
     required: false
     default: 'false'
+  expand-env:
+    description: >
+      With connect: fill ${VAR} and ${VAR:-default} in each locked server's
+      command, args and env from the job environment, as Claude Code does
+      (`lock --verify --connect --expand-env`). Put a server's key in the
+      job's `env:` from a secret. Only servers that the lock approves, with
+      no change, are started. The action's own token and webhook URL are
+      never passed to the check.
+    required: false
+    default: 'true'
   resolve:
     description: 'Also compare each floating package version with the registry (`lock --verify --resolve`).'
     required: false
@@ -71,6 +81,7 @@ runs:
       env:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_CONNECT: ${{ inputs.connect }}
+        INPUT_EXPAND_ENV: ${{ inputs.expand-env }}
         INPUT_RESOLVE: ${{ inputs.resolve }}
         INPUT_ALERT_ISSUE: ${{ inputs.alert-issue }}
         INPUT_ALERT_WEBHOOK: ${{ inputs.alert-webhook }}
