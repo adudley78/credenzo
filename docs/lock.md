@@ -607,9 +607,12 @@ A server can put a value that it got into its own tool text (for example "Run SQ
 postgres://app:pw@db/prod"). So, for each value of 8 characters or more that `--expand-env` put in:
 
 - it is redacted from the server's stderr and error text, and from the diffs and findings that
-  `lock --verify --connect` shows;
-- a server whose tool text holds it gets no entry in `mcp-lock.tools.json` (`--save-tool-text`),
-  with a warning. The saved text must match the lock's digest, so it cannot be redacted.
+  `lock --verify --connect` shows, where it appears as it was put in (a value that the server
+  encodes, cuts or masks is not found);
+- a server whose tool text holds it gets no new entry in `mcp-lock.tools.json`
+  (`--save-tool-text`), with a warning. The saved text must match the lock's digest, so it cannot
+  be redacted. An older entry for that server stays, and `--verify --connect` reports it as out of
+  step with the lock.
 
 A value of fewer than 8 characters is not redacted. The digests in `mcp-lock.json` hold no text.
 

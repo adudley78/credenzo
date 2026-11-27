@@ -559,7 +559,8 @@ def _run_write(
                 console.print(
                     f"[yellow]WARN[/yellow] tool text of "
                     f"{escape(server_key(server))} not saved: it holds a value "
-                    "that --expand-env put in from the environment."
+                    "that --expand-env put in from the environment. An older "
+                    "text of this server, if any, stays in the file."
                 )
                 continue
             text_records[server_key(server)] = text

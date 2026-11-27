@@ -126,8 +126,9 @@ you turn it on.
 A server that takes its key from `${API_KEY}` in `.mcp.json` gets the value
 from the job's `env:`, as it does from your shell in Claude Code
 (`lock --verify --connect --expand-env`; credenzo 0.37.0 or later). Put each
-key in a secret. Only the servers that the lock approves, with no change, are
-started. The action removes its own token and webhook URL from the
+key in a secret. Only the servers that the lock approves, with no `LOCK-001`
+drift, are started ([what is not drift](lock.md#keys-from-the-environment---expand-env)).
+The action removes its own token and webhook URL from the
 environment of the check. A started server runs as the same user as the job,
 so do not count on that as a wall against a server. Set `expand-env: "false"`
 to give each server the text `${API_KEY}` instead.
@@ -135,7 +136,9 @@ to give each server the text `${API_KEY}` instead.
 Run `connect` on `push`, `schedule` or `workflow_dispatch`. Never run it on
 `pull_request_target`: there the job has your secrets, and a pull request
 from a fork can change the lock and the config that say which servers start.
-On `pull_request` from a fork, GitHub gives the job no secrets.
+On `pull_request` from a fork, GitHub gives the job no secrets, unless the
+repository turns on "Send secrets to workflows from fork pull requests"; then
+treat `pull_request` like `pull_request_target`.
 
 ## Inputs and outputs
 
